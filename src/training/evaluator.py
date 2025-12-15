@@ -119,11 +119,33 @@ class OmegaEvaluator:
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
                 
-                # Compute target (for omega_hat loss)
-                diff = noisy_images - images
-                diff_flat = diff.view(diff.size(0), -1)
-                norm_squared = (diff_flat ** 2).sum(dim=1)
-                target = norm_squared / (sigma ** 3)
+                # Compute target based on loss type
+                loss_type = self.config['training']['loss_type']
+                
+                if loss_type == 'omega_hat':
+                    # Target: ||x - x_tilde||^2 / sigma^3
+                    diff = noisy_images - images
+                    diff_flat = diff.view(diff.size(0), -1)
+                    norm_squared = (diff_flat ** 2).sum(dim=1)
+                    target = norm_squared / (sigma ** 3)
+                elif loss_type == 'normalized':
+                    # Target: sigma (model learns to predict sigma directly)
+                    target = sigma
+                elif loss_type == 'relative':
+                    # Target: sigma (model learns to predict sigma, loss normalized by sigma)
+                    target = sigma
+                elif loss_type == 'sigma_cal':
+                    # Target: std(noise) - sigma
+                    noise = noisy_images - images
+                    noise_flat = noise.view(noise.size(0), -1)
+                    sigma_cal_std = torch.std(noise_flat, dim=1)
+                    target = sigma_cal_std - sigma
+                else:
+                    # Fallback to omega_hat
+                    diff = noisy_images - images
+                    diff_flat = diff.view(diff.size(0), -1)
+                    norm_squared = (diff_flat ** 2).sum(dim=1)
+                    target = norm_squared / (sigma ** 3)
                 
                 # Compute loss
                 loss = self.loss_fn(output, images, noisy_images, sigma)
