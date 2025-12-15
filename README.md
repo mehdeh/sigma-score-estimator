@@ -126,9 +126,9 @@ model:
   type: "omega_x_sigma"
   
 noise:
-  sigma_min: 0.01
-  sigma_max: 10.0
-  strategy: "log_uniform"
+  sigma_min: 0.00001  # 1e-5
+  sigma_max: 4.0
+  strategy: "uniform"
   
 training:
   loss_type: "omega_hat"

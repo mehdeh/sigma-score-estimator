@@ -120,8 +120,9 @@ class ResNetOmegaXSigma(nn.Module):
         # Concatenate the scalar sigma with the features from the image
         combined_input = torch.cat((out, sigma), dim=1)
 
-        # Pass the combined input through the embedding layer with ReLU activation
-        embedded = F.relu(self.fc_embedding(combined_input))
+        # Pass the combined input through the embedding layer
+        # Note: No ReLU activation here to match the original draft implementation
+        embedded = self.fc_embedding(combined_input)
 
         # Final regression output
         output = self.fc_out(embedded)
