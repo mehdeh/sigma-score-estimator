@@ -10,6 +10,13 @@ from .checkpoint import (
     load_model_only,
     get_checkpoint_info,
 )
+from .config import (
+    load_config,
+    save_config,
+    validate_config,
+    override_config_with_args,
+    create_default_config,
+)
 from .logger import setup_logger, MetricsLogger, create_experiment_dir
 from .visualization import (
     plot_loss_curves,
@@ -24,6 +31,11 @@ __all__ = [
     'save_model_only',
     'load_model_only',
     'get_checkpoint_info',
+    'load_config',
+    'save_config',
+    'validate_config',
+    'override_config_with_args',
+    'create_default_config',
     'setup_logger',
     'MetricsLogger',
     'create_experiment_dir',
