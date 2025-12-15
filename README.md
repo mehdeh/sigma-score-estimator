@@ -61,11 +61,11 @@ python main.py train --config config/model_x.yaml
 ```bash
 # Test a trained model
 python main.py test \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pkl
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pkl
 
 # Test with specific number of samples
 python main.py test \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pkl \
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pkl \
     --test-samples 1000
 ```
 
@@ -74,7 +74,7 @@ python main.py test \
 ```bash
 # Export model to .pkl format
 python main.py export \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pth \
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pth \
     --output my_omega_model.pkl
 ```
 
@@ -91,7 +91,9 @@ sigma-score-estimator/
 │   ├── data/                   # Data loading and noise generation
 │   ├── training/               # Training and evaluation
 │   └── utils/                  # Utilities (logging, checkpointing, etc.)
-├── experiment/                 # Experiment outputs (auto-generated)
+├── experiments/                # Experiment outputs (auto-generated)
+│   ├── train/                  # Training runs (exp_YYYYMMDD_HHMMSS)
+│   └── test/                   # Test runs (exp_YYYYMMDD_HHMMSS)
 ├── main.py                     # CLI entry point
 ├── requirements.txt            # Dependencies
 ├── README.md                   # This file
@@ -136,19 +138,17 @@ training:
 
 ## 📈 Monitoring Training
 
-Training progress is automatically saved to the experiment directory:
+Training progress is automatically saved to the experiments directory (flat files per run):
 
 ```
-experiment/exp_YYYYMMDD_HHMMSS/
+experiments/train/exp_YYYYMMDD_HHMMSS/
 ├── config.yaml              # Configuration used
-├── checkpoints/             # Model checkpoints
-│   ├── best_model.pkl       # Best model (lowest val loss)
-│   └── latest.pkl           # Latest checkpoint
-├── logs/
-│   ├── train.log            # Training logs
-│   └── metrics.json         # Training metrics
-└── plots/
-    └── loss_curve.png       # Loss curves
+├── best_model.pkl           # Best model (lowest val loss)
+├── latest.pkl               # Latest checkpoint
+├── checkpoint_epoch_*.pkl   # Periodic checkpoints
+├── train.log                # Training logs
+├── metrics.json             # Training metrics
+└── loss_curve.png           # Loss curves
 ```
 
 ## 🔍 Using Trained Models

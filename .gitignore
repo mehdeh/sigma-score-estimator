@@ -42,7 +42,7 @@ data/
 *.zip
 
 # Experiments
-experiment/
+experiments/
 runs/
 
 # Models

@@ -90,7 +90,7 @@ Resume from a checkpoint:
 ```bash
 python main.py train \
     --config config/model_x_sigma.yaml \
-    --resume experiment/exp_20231215_120000/checkpoints/latest.pkl
+    --resume experiments/train/exp_20231215_120000/latest.pkl
 ```
 
 ### Training Output
@@ -98,17 +98,14 @@ python main.py train \
 Training creates an experiment directory:
 
 ```
-experiment/exp_YYYYMMDD_HHMMSS/
+experiments/train/exp_YYYYMMDD_HHMMSS/
 ├── config.yaml              # Configuration used
-├── checkpoints/
-│   ├── best_model.pkl       # Best model (lowest val loss)
-│   ├── latest.pkl           # Latest checkpoint
-│   └── checkpoint_epoch_*.pkl  # Periodic checkpoints
-├── logs/
-│   ├── train.log            # Detailed logs
-│   └── metrics.json         # Training metrics
-└── plots/
-    └── loss_curve.png       # Loss curves
+├── best_model.pkl           # Best model (lowest val loss)
+├── latest.pkl               # Latest checkpoint
+├── checkpoint_epoch_*.pkl   # Periodic checkpoints
+├── train.log                # Detailed logs
+├── metrics.json             # Training metrics
+└── loss_curve.png           # Loss curves
 ```
 
 ## Testing Models
@@ -119,14 +116,14 @@ Test a trained model:
 
 ```bash
 python main.py test \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pkl
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pkl
 ```
 
 ### Test with Specific Configuration
 
 ```bash
 python main.py test \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pkl \
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pkl \
     --config config/model_x_sigma.yaml \
     --test-samples 5000
 ```
@@ -136,15 +133,13 @@ python main.py test \
 Testing creates a test directory:
 
 ```
-experiment/test_YYYYMMDD_HHMMSS/
+experiments/test/exp_YYYYMMDD_HHMMSS/
 ├── config.yaml              # Test configuration
-├── logs/
-│   ├── test.log             # Test logs
-│   └── test_metrics.json    # Evaluation metrics
-└── plots/
-    ├── test_scatter_predictions.png    # Predictions vs targets
-    ├── test_noise_distribution.png     # Noise level distribution
-    └── test_sample_images.png          # Sample clean/noisy images
+├── test.log                 # Test logs
+├── test_metrics.json        # Evaluation metrics
+├── test_scatter_predictions.png    # Predictions vs targets
+├── test_noise_distribution.png     # Noise level distribution
+└── test_sample_images.png          # Sample clean/noisy images
 ```
 
 ### Interpretation of Metrics
@@ -397,7 +392,7 @@ def generate_sigma(self, batch_size):
 
 ```bash
 python main.py export \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pth \
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pth \
     --output my_omega_model.pkl
 ```
 
@@ -405,7 +400,7 @@ python main.py export \
 
 ```bash
 python main.py export \
-    --checkpoint experiment/exp_20231215_120000/checkpoints/best_model.pkl \
+    --checkpoint experiments/train/exp_20231215_120000/best_model.pkl \
     --output my_omega_model.pth
 ```
 

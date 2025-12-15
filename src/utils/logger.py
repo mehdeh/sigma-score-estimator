@@ -127,7 +127,7 @@ class MetricsLogger:
         return best_epoch, best_val_loss
 
 
-def create_experiment_dir(base_dir='experiment', prefix='exp'):
+def create_experiment_dir(base_dir='experiments', prefix='exp'):
     """
     Create a new experiment directory with timestamp.
     

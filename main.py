@@ -70,13 +70,13 @@ def train_command(args):
     set_seed(seed)
     print(f"Random seed set to: {seed}")
     
-    # Create experiment directory under experiment/train by default
+    # Create experiment directory under experiments/train by default
     if args.exp_dir:
         exp_dir = args.exp_dir
         os.makedirs(exp_dir, exist_ok=True)
     else:
         exp_dir = create_experiment_dir(
-            base_dir=os.path.join('experiment', 'train'),
+            base_dir=os.path.join('experiments', 'train'),
             prefix='exp'
         )
     
@@ -171,7 +171,7 @@ def test_command(args):
         os.makedirs(exp_dir, exist_ok=True)
     else:
         exp_dir = create_experiment_dir(
-            base_dir=os.path.join('experiment', 'test'),
+            base_dir=os.path.join('experiments', 'test'),
             prefix='exp'
         )
     
