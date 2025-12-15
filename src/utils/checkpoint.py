@@ -85,7 +85,7 @@ def load_checkpoint(path, model=None, optimizer=None, device='cuda'):
         raise FileNotFoundError(f"Checkpoint file not found: {path}")
     
     # Load checkpoint
-    checkpoint = torch.load(path, map_location=device)
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
     
     # Determine format and load accordingly
     if 'model' in checkpoint:
@@ -154,38 +154,53 @@ def save_model_only(model, path, save_format='pkl'):
 def load_model_only(path, model=None, device='cuda'):
     """
     Load only the model (no optimizer or training history).
-    
+
     Args:
         path (str): Path to the model file
         model (nn.Module, optional): Model to load state dict into (for .pth format)
         device (str or torch.device): Device to load model on
-    
+
     Returns:
         nn.Module: The loaded model
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Model file not found: {path}")
-    
-    # Try to load as full model first
-    try:
-        loaded_model = torch.load(path, map_location=device)
-        if isinstance(loaded_model, torch.nn.Module):
-            print(f"Loaded full model from {path}")
-            return loaded_model
-    except:
-        pass
-    
-    # If that fails, try to load as state dict
+
+    # Load checkpoint/model object once
+    loaded_obj = torch.load(path, map_location=device, weights_only=False)
+
+    # Case 1: full serialized model
+    if isinstance(loaded_obj, torch.nn.Module):
+        loaded_obj = loaded_obj.to(device)
+        print(f"Loaded full model from {path}")
+        return loaded_obj
+
+    # Case 2: checkpoint dictionary
+    if isinstance(loaded_obj, dict):
+        if 'model' in loaded_obj and isinstance(loaded_obj['model'], torch.nn.Module):
+            model_obj = loaded_obj['model'].to(device)
+            print(f"Loaded full model from checkpoint {path}")
+            return model_obj
+        if 'model_state_dict' in loaded_obj:
+            if model is None:
+                raise ValueError(
+                    "Checkpoint contains a model state dict. Please provide a model instance to load it into."
+                )
+            model.load_state_dict(loaded_obj['model_state_dict'])
+            model = model.to(device)
+            print(f"Loaded model state dict from checkpoint {path}")
+            return model
+
+    # Case 3: raw state dict
     if model is None:
         raise ValueError(
             "Could not load as full model. Please provide a model instance to load state dict into."
         )
-    
-    state_dict = torch.load(path, map_location=device)
-    model.load_state_dict(state_dict)
+
+    model.load_state_dict(loaded_obj)
     model = model.to(device)
     print(f"Loaded model state dict from {path}")
-    
+
     return model
 
 
@@ -202,7 +217,7 @@ def get_checkpoint_info(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Checkpoint file not found: {path}")
     
-    checkpoint = torch.load(path, map_location='cpu')
+    checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     
     info = {
         'format': 'pkl' if 'model' in checkpoint else 'pth',
