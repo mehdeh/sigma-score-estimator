@@ -67,7 +67,7 @@ class OmegaEvaluator:
         )
         
         # Initialize logger
-        log_file = os.path.join(exp_dir, 'logs', 'test.log')
+        log_file = os.path.join(exp_dir, 'test.log')
         self.logger = setup_logger('OmegaEvaluator', log_file)
         
         self.logger.info(f"Initialized OmegaEvaluator with model type: {self.model_type}")
@@ -184,7 +184,7 @@ class OmegaEvaluator:
         
         # Save metrics to JSON
         import json
-        metrics_file = os.path.join(self.exp_dir, 'logs', 'test_metrics.json')
+        metrics_file = os.path.join(self.exp_dir, 'test_metrics.json')
         with open(metrics_file, 'w') as f:
             json.dump(metrics, f, indent=2)
         self.logger.info(f"Metrics saved to {metrics_file}")
@@ -192,8 +192,7 @@ class OmegaEvaluator:
         # Generate visualizations
         if visualize:
             self.logger.info("Generating visualizations...")
-            plots_dir = os.path.join(self.exp_dir, 'plots')
-            os.makedirs(plots_dir, exist_ok=True)
+            plots_dir = self.exp_dir
             
             # Scatter plot of predictions vs targets
             scatter_path = os.path.join(plots_dir, 'test_scatter_predictions.png')

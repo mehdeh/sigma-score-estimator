@@ -70,15 +70,15 @@ def train_command(args):
     set_seed(seed)
     print(f"Random seed set to: {seed}")
     
-    # Create experiment directory
+    # Create experiment directory under experiment/train by default
     if args.exp_dir:
         exp_dir = args.exp_dir
         os.makedirs(exp_dir, exist_ok=True)
-        os.makedirs(os.path.join(exp_dir, 'checkpoints'), exist_ok=True)
-        os.makedirs(os.path.join(exp_dir, 'logs'), exist_ok=True)
-        os.makedirs(os.path.join(exp_dir, 'plots'), exist_ok=True)
     else:
-        exp_dir = create_experiment_dir(base_dir='experiment', prefix='exp')
+        exp_dir = create_experiment_dir(
+            base_dir=os.path.join('experiment', 'train'),
+            prefix='exp'
+        )
     
     print(f"Experiment directory: {exp_dir}")
     
@@ -140,12 +140,18 @@ def test_command(args):
     if args.config:
         config = load_config(args.config)
     elif args.checkpoint:
-        # Try to load config from checkpoint directory
-        checkpoint_dir = os.path.dirname(os.path.dirname(args.checkpoint))
-        config_path = os.path.join(checkpoint_dir, 'config.yaml')
-        if os.path.exists(config_path):
-            config = load_config(config_path)
-        else:
+        # Try to load config from checkpoint directory (flat or legacy layout)
+        checkpoint_dir = os.path.dirname(args.checkpoint)
+        config_candidates = [
+            os.path.join(checkpoint_dir, 'config.yaml'),
+            os.path.join(os.path.dirname(checkpoint_dir), 'config.yaml'),
+        ]
+        config = None
+        for candidate in config_candidates:
+            if os.path.exists(candidate):
+                config = load_config(candidate)
+                break
+        if config is None:
             print("Warning: No config found. Using default config.")
             from src.utils.config import create_default_config
             config = create_default_config()
@@ -163,10 +169,11 @@ def test_command(args):
     if args.exp_dir:
         exp_dir = args.exp_dir
         os.makedirs(exp_dir, exist_ok=True)
-        os.makedirs(os.path.join(exp_dir, 'logs'), exist_ok=True)
-        os.makedirs(os.path.join(exp_dir, 'plots'), exist_ok=True)
     else:
-        exp_dir = create_experiment_dir(base_dir='experiment', prefix='test')
+        exp_dir = create_experiment_dir(
+            base_dir=os.path.join('experiment', 'test'),
+            prefix='exp'
+        )
     
     print(f"Test results directory: {exp_dir}")
     
@@ -241,11 +248,19 @@ def export_command(args):
     device = 'cpu'  # Export to CPU for portability
     
     # Try to infer model type from checkpoint directory
-    checkpoint_dir = os.path.dirname(os.path.dirname(args.checkpoint))
-    config_path = os.path.join(checkpoint_dir, 'config.yaml')
+    checkpoint_dir = os.path.dirname(args.checkpoint)
+    config_candidates = [
+        os.path.join(checkpoint_dir, 'config.yaml'),
+        os.path.join(os.path.dirname(checkpoint_dir), 'config.yaml'),
+    ]
     
-    if os.path.exists(config_path):
-        config = load_config(config_path)
+    config = None
+    for candidate in config_candidates:
+        if os.path.exists(candidate):
+            config = load_config(candidate)
+            break
+    
+    if config is not None:
         model_type = config['model']['type']
     elif args.model_type:
         model_type = args.model_type

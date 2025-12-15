@@ -141,11 +141,7 @@ def create_experiment_dir(base_dir='experiment', prefix='exp'):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     exp_dir = os.path.join(base_dir, f'{prefix}_{timestamp}')
     
-    # Create subdirectories
     os.makedirs(exp_dir, exist_ok=True)
-    os.makedirs(os.path.join(exp_dir, 'checkpoints'), exist_ok=True)
-    os.makedirs(os.path.join(exp_dir, 'logs'), exist_ok=True)
-    os.makedirs(os.path.join(exp_dir, 'plots'), exist_ok=True)
     
     return exp_dir
 

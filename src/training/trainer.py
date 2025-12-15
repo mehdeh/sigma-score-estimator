@@ -101,11 +101,11 @@ class OmegaTrainer:
             self.scheduler = None
         
         # Initialize logger
-        log_file = os.path.join(exp_dir, 'logs', 'train.log')
+        log_file = os.path.join(exp_dir, 'train.log')
         self.logger = setup_logger('OmegaTrainer', log_file)
         
         # Initialize metrics logger
-        self.metrics_logger = MetricsLogger(os.path.join(exp_dir, 'logs'))
+        self.metrics_logger = MetricsLogger(exp_dir)
         
         # Training state
         self.start_epoch = 0
@@ -295,7 +295,7 @@ class OmegaTrainer:
             # Save checkpoint periodically
             if (epoch + 1) % self.save_every == 0:
                 checkpoint_path = os.path.join(
-                    self.exp_dir, 'checkpoints', f'checkpoint_epoch_{epoch+1}.{self.save_format}'
+                    self.exp_dir, f'checkpoint_epoch_{epoch+1}.{self.save_format}'
                 )
                 save_checkpoint(
                     self.model,
@@ -314,7 +314,7 @@ class OmegaTrainer:
                 self.epochs_without_improvement = 0
                 
                 best_path = os.path.join(
-                    self.exp_dir, 'checkpoints', f'best_model.{self.save_format}'
+                    self.exp_dir, f'best_model.{self.save_format}'
                 )
                 save_checkpoint(
                     self.model,
@@ -341,7 +341,7 @@ class OmegaTrainer:
                 self.scheduler.step()
             
             # Plot loss curves
-            plot_path = os.path.join(self.exp_dir, 'plots', 'loss_curve.png')
+            plot_path = os.path.join(self.exp_dir, 'loss_curve.png')
             plot_loss_curves(
                 self.train_losses,
                 self.val_losses,
@@ -351,7 +351,7 @@ class OmegaTrainer:
         
         # Save final checkpoint
         final_path = os.path.join(
-            self.exp_dir, 'checkpoints', f'latest.{self.save_format}'
+            self.exp_dir, f'latest.{self.save_format}'
         )
         save_checkpoint(
             self.model,
