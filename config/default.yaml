@@ -1,0 +1,49 @@
+# Default configuration for sigma-score-estimator
+
+# Model configuration
+model:
+  type: "omega_x_sigma"  # Options: "omega_x", "omega_x_sigma"
+  backbone: "resnet18"
+
+# Noise generation configuration
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
+  num_samples: 100  # Number of pre-filtered samples for select_batch strategy
+
+# Training configuration
+training:
+  loss_type: "omega_hat"  # Options: "omega_hat", "normalized", "relative", "sigma_cal"
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0
+  scheduler: "cosine"  # Options: "cosine", "step", "none"
+  scheduler_params:
+    T_max: 100
+  early_stopping: true
+  patience: 10  # Number of epochs to wait before early stopping
+
+# Data configuration
+data:
+  batch_size: 128
+  num_workers: 4
+  train_val_split: [0.85, 0.10]  # [train_ratio, val_ratio]
+  test_split: 0.05
+  data_root: "./data"
+
+# Checkpoint configuration
+checkpoint:
+  save_format: "pkl"  # Options: "pkl", "pth"
+  save_best: true  # Save best model based on validation loss
+  save_every: 10  # Save checkpoint every N epochs
+
+# Logging configuration
+logging:
+  log_interval: 100  # Log training stats every N batches
+  plot_interval: 1  # Generate plots every N epochs
+
+# Device and seed
+device: "cuda"  # Options: "cuda", "cpu"
+seed: 42
+
