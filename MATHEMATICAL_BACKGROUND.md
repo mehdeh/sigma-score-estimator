@@ -372,7 +372,7 @@ $$
 
 **Transformation**:
 $$
-\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\text{output}_\theta(\mathbf{x}, \sigma)}
+\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\hat{\omega}_\theta(\mathbf{x}, \sigma)}
 $$
 
 **Loss Function**:
@@ -446,7 +446,7 @@ For **Loss Types 1-4**, the model directly outputs $\hat{\omega}_\theta(\mathbf{
 
 For **Loss Types 5-8**, the model output is transformed:
 $$
-\text{output}_\theta \rightarrow \acute{\omega}_\theta = \frac{d}{\text{output}_\theta} \rightarrow \hat{\omega}_\theta = \frac{d}{\acute{\omega}_\theta} = \text{output}_\theta
+\hat{\omega}_\theta \rightarrow \acute{\omega}_\theta = \frac{d}{\hat{\omega}_\theta} \rightarrow \hat{\omega}_\theta = \frac{d}{\acute{\omega}_\theta} = \hat{\omega}_\theta
 $$
 
 ### 7.2 Converting Between Estimators
@@ -465,7 +465,7 @@ $$
 
 ### 7.3 Numerical Stability
 
-- For Loss Types 5-8, ensure $\text{output}_\theta > \epsilon$ (small positive constant) to avoid division by zero
+- For Loss Types 5-8, ensure $\hat{\omega}_\theta > \epsilon$ (small positive constant) to avoid division by zero
 - Use appropriate activation functions (e.g., softplus, exponential with offset) to ensure positive outputs
 - For very small $\sigma$ values, consider using log-space computations
 
