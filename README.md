@@ -1,10 +1,16 @@
 # Sigma-Score-Estimator
 
-A modular PyTorch framework for training ResNet-based models to estimate the **noise-level score gradient** $\nabla_\sigma \log p(\mathbf{x}, \sigma)$, which is a fundamental component in diffusion models for adaptive noise scheduling during sampling.
+A modular PyTorch framework for training ResNet-based models to estimate the **noise-level score gradient** $\nabla_\sigma \log p(\mathbf{x}, \sigma)$ or its corrected form $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$, which are fundamental components in diffusion models for adaptive noise scheduling during sampling.
 
 ## 📋 Overview
 
-This repository implements deep learning models that estimate the gradient of log-probability with respect to the noise level $\sigma$. The model $\omega_{\phi}(\mathbf{x}, \sigma)$ serves as an estimator for this gradient, enabling better control over noise scheduling in diffusion models.
+This repository implements deep learning models that estimate the gradient of log-probability with respect to the noise level $\sigma$. The framework provides:
+
+- **Theoretical Foundation**: Complete mathematical derivation connecting denoising models to score functions
+- **Two Estimator Types**: 
+  - $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
+  - $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
+- **Practical Implementation**: Multiple loss formulations enabling better control over noise scheduling in diffusion models
 
 ### Key Features
 
@@ -13,10 +19,11 @@ This repository implements deep learning models that estimate the gradient of lo
   - $\omega_{\phi}(\mathbf{x}, \sigma)$: Image and noise level input
 
 - **Multiple Loss Functions:**
-  - 8 different loss formulations based on statistical properties
-  - Omega-based losses (Types 1-4): Direct estimation of score magnitude
+  - 8 different loss formulations with rigorous theoretical foundation
+  - Omega-based losses (Types 1-4): Direct estimation of corrected sigma score $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$
   - Sigma-based losses (Types 5-8): Indirect estimation via noise level prediction
-  - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for details
+  - All formulations derived from score matching principles
+  - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for complete derivations
   
 - **Flexible Noise Sampling:**
   - Uniform sampling
@@ -105,11 +112,32 @@ sigma-score-estimator/
 
 ## 🔬 Mathematical Background
 
-The model estimates $\nabla_\sigma \log p(\mathbf{x}, \sigma)$, the gradient of log-probability with respect to noise level. The training objective is derived from theoretical considerations:
+### Core Theory
+
+The framework builds on the fundamental relationship between **denoising models** and **score functions**:
+
+$$\nabla_{\mathbf{x}} \log p(\mathbf{x}, \sigma) = -\frac{1}{\sigma^2}[\mathbf{x} - D(\mathbf{x}, \sigma)]$$
+
+where $D(\mathbf{x}, \sigma)$ is a pretrained denoising model. This allows using existing denoising models to compute score functions.
+
+### Sigma Score Estimation
+
+For the noise-level score gradient, we derive the closed-form expression:
+
+$$\nabla_\sigma \log p(\mathbf{x}, \sigma) = \frac{\int p_{\text{data}}(\tilde{\mathbf{x}}) \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) \left[\frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3} - \frac{d}{\sigma}\right] d\tilde{\mathbf{x}}}{p(\mathbf{x}, \sigma)}$$
+
+The model $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ is trained to estimate the **corrected gradient** $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ using:
 
 $$\mathcal{L}(\hat{\omega}; \sigma) = \mathbb{E}_{\tilde{\mathbf{x}} \sim p_{\text{data}}} \mathbb{E}_{\mathbf{x} \sim \mathcal{N}(\tilde{\mathbf{x}}, \sigma^2 \mathbf{I})} \left[ \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{ \lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2 }{\sigma^3} \right)^2 \right]$$
 
-For complete mathematical derivation, see [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md).
+The corrected objective ensures monotonic decrease of $\sigma$ during sampling, enabling better mode coverage in multimodal distributions.
+
+**Complete derivation**: See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for:
+- Relationship between denoising models and score functions
+- Derivation of sigma score closed-form expression
+- Loss function derivation
+- Corrected objective function ($\sigma^d p(\mathbf{x}, \sigma)$)
+- Eight practical loss formulations
 
 ## 📊 Configuration
 
@@ -241,7 +269,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Inspired by the `cifar-noise-estimation` repository
 - Built with PyTorch and modern ML best practices
-- Mathematical formulation from diffusion model theory
+- Mathematical formulation based on:
+  - Score-based generative modeling [Song et al., 2021]
+  - Denoising diffusion probabilistic models [Ho et al., 2020]
+  - Connection between denoising and score matching [Karras et al., 2022; Vincent, 2011]
+  - Theory of score matching [Hyvärinen & Dayan, 2005]
 
 ---
 
