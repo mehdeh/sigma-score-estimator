@@ -438,6 +438,42 @@ $$
 
 ---
 
+### Loss Type 9: `omega_chi_zscore` (Chi-Squared Z-Score)
+
+**Description**: Model learns the z-score (standardized value) of the chi-squared distribution.
+
+**Target**: 
+
+$$
+\acute{\omega}_{\text{target}} = \frac{\lVert\epsilon\rVert_2^2 - d}{\sqrt{2d}}
+$$
+
+**Loss Function**:
+
+$$
+\mathcal{L}_9 = \left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert\epsilon\rVert_2^2 - d}{\sqrt{2d}}\right)^2
+$$
+
+**Output Transformation** (applied after training):
+
+$$
+\hat{\omega} = \frac{\acute{\omega}_\theta \cdot \sqrt{2d} + d}{\sigma}
+$$
+
+**Advantage**: Learns a normalized quantity (z-score) with approximately zero mean and unit variance, which may provide more stable training dynamics. Combines the benefits of chi-squared distribution knowledge with direct relationship to sigma.
+
+**Mathematical Justification**: 
+
+Since $\lVert\epsilon\rVert_2^2 \sim \chi^2_d$ with $\mathbb{E}[\lVert\epsilon\rVert_2^2] = d$ and $\text{Var}[\lVert\epsilon\rVert_2^2] = 2d$, the z-score standardization yields:
+
+$$
+Z = \frac{\lVert\epsilon\rVert_2^2 - d}{\sqrt{2d}} \xrightarrow{d \to \infty} \mathcal{N}(0, 1)
+$$
+
+By the Central Limit Theorem, this approximation becomes increasingly accurate for high-dimensional data (e.g., $d = 3072$ for CIFAR-10).
+
+---
+
 ### Summary Table
 
 | Loss Type | Name | Target Quantity | Key Feature | Estimates |
@@ -450,6 +486,7 @@ $$
 | 6 | `sigma_normalized` | $\sigma$ (normalized) | Weighted by $1/\sigma$ | $\nabla_\sigma \log[\sigma^d p]$ |
 | 7 | `sigma_relative` | $\sigma$ (relative) | Scale-invariant | $\nabla_\sigma \log[\sigma^d p]$ |
 | 8 | `sigma_calibrated` | $\sigma_{\text{cal}} - \sigma$ | Calibrated prediction | $\nabla_\sigma \log[\sigma^d p]$ |
+| 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
 
 ---
 
@@ -457,12 +494,19 @@ $$
 
 ### 7.1 Model Output Interpretation
 
-For **Loss Types 1-4**, the model directly outputs $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ which estimates $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$.
+**For Loss Types 1-4**: The model directly outputs $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ which estimates $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$.
+- No transformation needed during inference
+- Output is immediately usable for sampling
 
-For **Loss Types 5-8**, the model output is transformed:
-$$
-\hat{\omega}_\theta \rightarrow \acute{\omega}_\theta = \frac{d}{\hat{\omega}_\theta} \rightarrow \hat{\omega}_\theta = \frac{d}{\acute{\omega}_\theta} = \hat{\omega}_\theta
-$$
+**For Loss Types 5-8**: The model outputs $\acute{\omega}_\theta$ (sigma estimate or related quantity).
+- During training: Model learns to predict sigma (or calibrated variant)
+- During inference: Transform applied: $\hat{\omega} = d / \acute{\omega}$ (or variant)
+- **Important**: Transformation is NOT part of loss computation
+
+**For Loss Type 9**: The model outputs z-score of chi-squared distribution.
+- During training: Model learns z-score $(||\epsilon||^2 - d) / \sqrt{2d}$
+- During inference: Transform applied: $\hat{\omega} = (\acute{\omega} \cdot \sqrt{2d} + d) / \sigma$
+- **Important**: Transformation is NOT part of loss computation
 
 ### 7.2 Converting Between Estimators
 
@@ -489,7 +533,42 @@ $$
 - **Loss Types 1-4**: Direct estimation approaches, suitable for most applications
 - **Loss Type 4**: Simplest formulation with deterministic target, good baseline
 - **Loss Types 5-8**: Indirect estimation via $\sigma$ prediction, may provide better numerical properties
+- **Loss Type 9**: Learns normalized z-score, potentially more stable training dynamics
 - The corrected objective (using $\hat{\omega}_\theta$) ensures monotonic decrease of $\sigma$ during sampling
+
+### 7.5 Output Transformation Architecture
+
+The output transformation is cleanly separated from loss computation:
+
+**During Training**: 
+- Loss functions compute MSE between model raw output and training target
+- No transformation applied inside the loss function
+- Models learn directly interpretable quantities (e.g., sigma, z-score)
+
+**During Inference**: 
+- Output transform converts model output to $\hat{\omega}_\theta$ for sampling
+- Transform is applied automatically in the `OmegaEvaluator` class
+- Ensures consistent evaluation across all loss types
+
+**During Evaluation**: 
+- Transform is applied before computing metrics
+- All metrics are computed in $\hat{\omega}$ space
+- Ground truth: $\hat{\omega}_{\text{true}} = ||\epsilon||^2 / \sigma$
+
+This separation ensures:
+1. **Simplicity**: Loss functions are mathematically simple and numerically stable
+2. **Interpretability**: Model learns directly meaningful quantities
+3. **Consistency**: Centralized transformation logic, easy to maintain and extend
+4. **Correctness**: Transformation applied at the right time (inference, not training)
+
+**Transformation Summary**:
+
+| Loss Types | Model Learns | Training Target | Inference Transform | Final Output |
+|------------|--------------|-----------------|---------------------|--------------|
+| 1-4 | $\hat{\omega}$ | $\hat{\omega}$-related | None (identity) | $\hat{\omega}$ |
+| 5-7 | $\sigma$ | $\sigma$ | $d / \acute{\omega}$ | $\hat{\omega}$ |
+| 8 | $\sigma_{\text{cal}} - \sigma$ | $\sigma_{\text{cal}} - \sigma$ | $d / (\sigma_{\text{cal}} - \acute{\omega})$ | $\hat{\omega}$ |
+| 9 | z-score | $(\\|\epsilon\\|^2 - d) / \sqrt{2d}$ | $(\acute{\omega} \sqrt{2d} + d) / \sigma$ | $\hat{\omega}$ |
 
 ---
 

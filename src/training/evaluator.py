@@ -16,6 +16,7 @@ from ..utils import (
     visualize_sample_images,
 )
 from .loss_functions import LossFactory
+from .output_transforms import TransformFactory
 
 
 class OmegaEvaluator:
@@ -69,11 +70,19 @@ class OmegaEvaluator:
         )
         self.image_dim = image_dim
         
+        # Initialize output transform
+        self.output_transform = TransformFactory.get_transform(
+            loss_type=config['training']['loss_type'],
+            image_dim=image_dim,
+            sigma_cal=sigma_cal
+        )
+        
         # Initialize logger
         log_file = os.path.join(exp_dir, 'test.log')
         self.logger = setup_logger('OmegaEvaluator', log_file)
         
         self.logger.info(f"Initialized OmegaEvaluator with model type: {self.model_type}")
+        self.logger.info(f"Output transform: {type(self.output_transform).__name__}")
     
     def evaluate(self, num_samples=None, visualize=True):
         """
@@ -122,54 +131,19 @@ class OmegaEvaluator:
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
                 
-                # Compute target based on loss type
-                loss_type = self.config['training']['loss_type']
+                # Apply output transformation to get omega_hat
+                # This converts model output to omega_hat for evaluation
+                omega_hat = self.output_transform.apply(output, sigma=sigma)
                 
-                # Compute common quantities
-                diff = noisy_images - images
-                diff_flat = diff.view(diff.size(0), -1)
-                norm_squared = (diff_flat ** 2).sum(dim=1)
+                # Compute target (ground truth omega_hat)
+                # All evaluation is done in omega_hat space
+                target = self._compute_omega_hat_target(images, noisy_images, sigma)
                 
-                if loss_type == 'omega_hat':
-                    # Target: ||x - x_tilde||^2 / sigma^3
-                    target = norm_squared / (sigma ** 3)
-                    
-                elif loss_type == 'omega_epsilon':
-                    # Target: ||epsilon||^2 / sigma
-                    epsilon = diff_flat / sigma.view(-1, 1)
-                    epsilon_norm_sq = (epsilon ** 2).sum(dim=1)
-                    target = epsilon_norm_sq / sigma
-                    
-                elif loss_type == 'omega_chi_approx':
-                    # Target: (d + sqrt(2*d) * Z) / sigma
-                    # Note: Z is sampled in loss function, here we use actual epsilon norm
-                    epsilon_norm_sq = norm_squared / (sigma ** 2)
-                    target = epsilon_norm_sq / sigma
-                    
-                elif loss_type == 'omega_chi_mean':
-                    # Target: d / sigma
-                    target = self.image_dim / sigma
-                    
-                elif loss_type in ['sigma_direct', 'sigma_normalized', 'sigma_relative']:
-                    # For sigma-based losses, we need to compute omega_acute from output
-                    # omega_acute = d / output
-                    # Target is sigma for comparison
-                    target = sigma
-                    
-                elif loss_type == 'sigma_calibrated':
-                    # Target: sigma_cal - sigma
-                    sigma_cal = self.config['training'].get('sigma_cal', 0.0)
-                    target = sigma_cal - sigma
-                    
-                else:
-                    # Fallback to omega_hat
-                    target = norm_squared / (sigma ** 3)
-                
-                # Compute loss
+                # Compute loss (for logging purposes)
                 loss = self.loss_fn(output, images, noisy_images, sigma)
                 
-                # Store results
-                all_predictions.append(output.squeeze().cpu())
+                # Store results (omega_hat predictions and targets)
+                all_predictions.append(omega_hat.squeeze().cpu())
                 all_targets.append(target.cpu())
                 all_sigmas.append(sigma.cpu())
                 all_losses.append(loss.item())
@@ -274,16 +248,54 @@ class OmegaEvaluator:
         
         return metrics
     
+    def _compute_omega_hat_target(self, clean_images, noisy_images, sigma):
+        """
+        Compute ground truth omega_hat for evaluation.
+        
+        All evaluation metrics are computed in omega_hat space after transformation.
+        This provides a consistent evaluation metric across all loss types.
+        
+        Args:
+            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
+            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
+            sigma (Tensor): Noise levels, shape (batch_size,)
+        
+        Returns:
+            Tensor: Ground truth omega_hat = ||epsilon||^2 / sigma
+        """
+        batch_size = clean_images.size(0)
+        
+        # Flatten images
+        clean_flat = clean_images.view(batch_size, -1)
+        noisy_flat = noisy_images.view(batch_size, -1)
+        
+        # Ensure sigma is 1D
+        if sigma.dim() > 1:
+            sigma = sigma.squeeze()
+        
+        # Compute epsilon = (x - x_tilde) / sigma
+        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
+        
+        # Compute ||epsilon||^2
+        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
+        
+        # Ground truth omega_hat = ||epsilon||^2 / sigma
+        omega_hat_target = epsilon_norm_sq / sigma
+        
+        return omega_hat_target
+    
     def predict_batch(self, images, sigma):
         """
         Make predictions for a batch of images.
+        
+        Applies the appropriate output transformation to convert model output to omega_hat.
         
         Args:
             images (Tensor): Clean images (batch_size, C, H, W)
             sigma (Tensor or float): Noise levels
         
         Returns:
-            Tensor: Model predictions
+            Tensor: Transformed predictions (omega_hat)
         """
         self.model.eval()
         
@@ -303,6 +315,9 @@ class OmegaEvaluator:
                 output = self.model(noisy_images)
             else:  # omega_x_sigma
                 output = self.model(noisy_images, sigma)
+            
+            # Apply output transformation
+            omega_hat = self.output_transform.apply(output, sigma=sigma)
         
-        return output
+        return omega_hat
 

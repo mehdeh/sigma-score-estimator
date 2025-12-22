@@ -26,7 +26,8 @@ class LossFactory:
         'sigma_direct',        # Loss Type 5: Direct sigma estimation
         'sigma_normalized',    # Loss Type 6: Normalized sigma estimation
         'sigma_relative',      # Loss Type 7: Relative sigma estimation
-        'sigma_calibrated'     # Loss Type 8: Calibrated sigma estimation
+        'sigma_calibrated',    # Loss Type 8: Calibrated sigma estimation
+        'omega_chi_zscore'     # Loss Type 9: Chi-squared z-score
     ]
     
     @staticmethod
@@ -60,6 +61,8 @@ class LossFactory:
             return SigmaRelativeLoss(image_dim=image_dim)
         elif loss_type == 'sigma_calibrated':
             return SigmaCalibratedLoss(image_dim=image_dim, sigma_cal=sigma_cal)
+        elif loss_type == 'omega_chi_zscore':
+            return OmegaChiZScoreLoss(image_dim=image_dim)
         else:
             raise ValueError(f"Unknown loss type: {loss_type}. Available: {LossFactory.AVAILABLE_LOSSES}")
 
@@ -299,28 +302,27 @@ class SigmaDirectLoss(nn.Module):
     """
     Loss Type 5: Direct sigma estimation
     
-    Transformation: omega_acute = d / output
-    Loss: (omega_acute - sigma)^2
+    The model learns to predict sigma directly (output IS omega_acute = sigma).
+    After training, output is transformed to omega_hat = d / output during inference.
     
-    The network learns to predict sigma directly.
+    Target: sigma
+    Loss: (output - sigma)^2
     """
     
-    def __init__(self, image_dim=3072, epsilon=1e-8):
+    def __init__(self, image_dim=3072):
         """
         Args:
-            image_dim: Dimensionality of the image (d)
-            epsilon: Small constant to prevent division by zero
+            image_dim: Dimensionality of the image (d) - kept for consistency but not used in loss
         """
         super(SigmaDirectLoss, self).__init__()
         self.image_dim = image_dim
-        self.epsilon = epsilon
         
     def forward(self, output, clean_images, noisy_images, sigma):
         """
         Compute Loss Type 5.
         
         Args:
-            output: Model raw output, shape (batch_size, 1) or (batch_size,)
+            output: Model output (sigma prediction), shape (batch_size, 1) or (batch_size,)
             clean_images: Clean images x_tilde, shape (batch_size, C, H, W)
             noisy_images: Noisy images x, shape (batch_size, C, H, W)
             sigma: Noise level sigma, shape (batch_size,) or (batch_size, 1)
@@ -328,7 +330,7 @@ class SigmaDirectLoss(nn.Module):
         Returns:
             Loss value (scalar)
         """
-        # Ensure output is 1D and positive
+        # Ensure output is 1D
         if output.dim() > 1:
             output = output.squeeze()
         
@@ -336,15 +338,11 @@ class SigmaDirectLoss(nn.Module):
         if sigma.dim() > 1:
             sigma = sigma.squeeze()
         
-        # Transform: omega_acute = d / output
-        # Add epsilon to prevent division by zero
-        omega_acute = self.image_dim / (torch.abs(output) + self.epsilon)
-        
-        # Target: sigma
+        # Target: sigma (model learns to predict sigma directly)
         target = sigma
         
         # Compute MSE loss
-        loss = torch.mean((omega_acute - target) ** 2)
+        loss = torch.mean((output - target) ** 2)
         
         return loss
 
@@ -357,16 +355,18 @@ class SigmaNormalizedLoss(nn.Module):
     """
     Loss Type 6: Normalized sigma estimation
     
-    Transformation: omega_acute = d / output
-    Loss: (omega_acute - sigma)^2 / sigma
+    The model learns to predict sigma directly (output IS omega_acute = sigma).
+    Loss is normalized by sigma to weight errors at different noise levels.
+    After training, output is transformed to omega_hat = d / output during inference.
     
-    Normalizes by sigma to weight errors at different noise levels.
+    Target: sigma
+    Loss: (output - sigma)^2 / sigma
     """
     
     def __init__(self, image_dim=3072, epsilon=1e-8):
         """
         Args:
-            image_dim: Dimensionality of the image (d)
+            image_dim: Dimensionality of the image (d) - kept for consistency but not used in loss
             epsilon: Small constant to prevent division by zero
         """
         super(SigmaNormalizedLoss, self).__init__()
@@ -378,7 +378,7 @@ class SigmaNormalizedLoss(nn.Module):
         Compute Loss Type 6.
         
         Args:
-            output: Model raw output, shape (batch_size, 1) or (batch_size,)
+            output: Model output (sigma prediction), shape (batch_size, 1) or (batch_size,)
             clean_images: Clean images x_tilde, shape (batch_size, C, H, W)
             noisy_images: Noisy images x, shape (batch_size, C, H, W)
             sigma: Noise level sigma, shape (batch_size,) or (batch_size, 1)
@@ -386,7 +386,7 @@ class SigmaNormalizedLoss(nn.Module):
         Returns:
             Loss value (scalar)
         """
-        # Ensure output is 1D and positive
+        # Ensure output is 1D
         if output.dim() > 1:
             output = output.squeeze()
         
@@ -394,14 +394,11 @@ class SigmaNormalizedLoss(nn.Module):
         if sigma.dim() > 1:
             sigma = sigma.squeeze()
         
-        # Transform: omega_acute = d / output
-        omega_acute = self.image_dim / (torch.abs(output) + self.epsilon)
-        
-        # Target: sigma
+        # Target: sigma (model learns to predict sigma directly)
         target = sigma
         
-        # Compute normalized loss: (omega_acute - sigma)^2 / sigma
-        loss = torch.mean(((omega_acute - target) ** 2) / (sigma + self.epsilon))
+        # Compute normalized loss: (output - sigma)^2 / sigma
+        loss = torch.mean(((output - target) ** 2) / (sigma + self.epsilon))
         
         return loss
 
@@ -414,16 +411,18 @@ class SigmaRelativeLoss(nn.Module):
     """
     Loss Type 7: Relative sigma estimation
     
-    Transformation: omega_acute = d / output
-    Loss: (omega_acute - sigma)^2 / sigma^2
+    The model learns to predict sigma directly (output IS omega_acute = sigma).
+    Loss emphasizes relative error, making it scale-invariant.
+    After training, output is transformed to omega_hat = d / output during inference.
     
-    Emphasizes relative error, making the loss scale-invariant.
+    Target: sigma
+    Loss: (output - sigma)^2 / sigma^2
     """
     
     def __init__(self, image_dim=3072, epsilon=1e-8):
         """
         Args:
-            image_dim: Dimensionality of the image (d)
+            image_dim: Dimensionality of the image (d) - kept for consistency but not used in loss
             epsilon: Small constant to prevent division by zero
         """
         super(SigmaRelativeLoss, self).__init__()
@@ -435,7 +434,7 @@ class SigmaRelativeLoss(nn.Module):
         Compute Loss Type 7.
         
         Args:
-            output: Model raw output, shape (batch_size, 1) or (batch_size,)
+            output: Model output (sigma prediction), shape (batch_size, 1) or (batch_size,)
             clean_images: Clean images x_tilde, shape (batch_size, C, H, W)
             noisy_images: Noisy images x, shape (batch_size, C, H, W)
             sigma: Noise level sigma, shape (batch_size,) or (batch_size, 1)
@@ -443,7 +442,7 @@ class SigmaRelativeLoss(nn.Module):
         Returns:
             Loss value (scalar)
         """
-        # Ensure output is 1D and positive
+        # Ensure output is 1D
         if output.dim() > 1:
             output = output.squeeze()
         
@@ -451,14 +450,11 @@ class SigmaRelativeLoss(nn.Module):
         if sigma.dim() > 1:
             sigma = sigma.squeeze()
         
-        # Transform: omega_acute = d / output
-        omega_acute = self.image_dim / (torch.abs(output) + self.epsilon)
-        
-        # Target: sigma
+        # Target: sigma (model learns to predict sigma directly)
         target = sigma
         
-        # Compute relative loss: (omega_acute - sigma)^2 / sigma^2
-        loss = torch.mean(((omega_acute - target) ** 2) / ((sigma ** 2) + self.epsilon))
+        # Compute relative loss: (output - sigma)^2 / sigma^2
+        loss = torch.mean(((output - target) ** 2) / ((sigma ** 2) + self.epsilon))
         
         return loss
 
@@ -471,30 +467,29 @@ class SigmaCalibratedLoss(nn.Module):
     """
     Loss Type 8: Calibrated sigma estimation
     
-    Transformation: omega_acute = d / output
-    Loss: (omega_acute - (sigma_cal - sigma))^2
+    The model learns to predict (sigma_cal - sigma) directly (output IS omega_acute).
+    After training, output is transformed to omega_hat = d / (sigma_cal - output) during inference.
     
-    Similar to Sigma-Cal Loss with calibration parameter.
+    Target: sigma_cal - sigma
+    Loss: (output - (sigma_cal - sigma))^2
     """
     
-    def __init__(self, image_dim=3072, sigma_cal=0.0, epsilon=1e-8):
+    def __init__(self, image_dim=3072, sigma_cal=0.0):
         """
         Args:
-            image_dim: Dimensionality of the image (d)
+            image_dim: Dimensionality of the image (d) - kept for consistency but not used in loss
             sigma_cal: Calibration parameter
-            epsilon: Small constant to prevent division by zero
         """
         super(SigmaCalibratedLoss, self).__init__()
         self.image_dim = image_dim
         self.sigma_cal = sigma_cal
-        self.epsilon = epsilon
         
     def forward(self, output, clean_images, noisy_images, sigma):
         """
         Compute Loss Type 8.
         
         Args:
-            output: Model raw output, shape (batch_size, 1) or (batch_size,)
+            output: Model output (prediction of sigma_cal - sigma), shape (batch_size, 1) or (batch_size,)
             clean_images: Clean images x_tilde, shape (batch_size, C, H, W)
             noisy_images: Noisy images x, shape (batch_size, C, H, W)
             sigma: Noise level sigma, shape (batch_size,) or (batch_size, 1)
@@ -502,7 +497,7 @@ class SigmaCalibratedLoss(nn.Module):
         Returns:
             Loss value (scalar)
         """
-        # Ensure output is 1D and positive
+        # Ensure output is 1D
         if output.dim() > 1:
             output = output.squeeze()
         
@@ -510,14 +505,84 @@ class SigmaCalibratedLoss(nn.Module):
         if sigma.dim() > 1:
             sigma = sigma.squeeze()
         
-        # Transform: omega_acute = d / output
-        omega_acute = self.image_dim / (torch.abs(output) + self.epsilon)
-        
-        # Target: sigma_cal - sigma
+        # Target: sigma_cal - sigma (model learns this directly)
         target = self.sigma_cal - sigma
         
         # Compute MSE loss
-        loss = torch.mean((omega_acute - target) ** 2)
+        loss = torch.mean((output - target) ** 2)
+        
+        return loss
+
+
+# ============================================================================
+# Loss Type 9: omega_chi_zscore (Chi-Squared Z-Score)
+# ============================================================================
+
+class OmegaChiZScoreLoss(nn.Module):
+    """
+    Loss Type 9: Chi-squared z-score based estimation
+    
+    The model learns the z-score of the chi-squared distribution:
+    Target: (||epsilon||^2 - d) / sqrt(2*d)
+    
+    This normalizes the chi-squared random variable to have approximately
+    zero mean and unit variance (by the Central Limit Theorem).
+    
+    After training, output is transformed to omega_hat during inference:
+    omega_hat = (output * sqrt(2*d) + d) / sigma
+    
+    Target: (||epsilon||^2 - d) / sqrt(2*d)
+    Loss: (output - target)^2
+    """
+    
+    def __init__(self, image_dim=3072):
+        """
+        Args:
+            image_dim: Dimensionality of the image (d)
+        """
+        super(OmegaChiZScoreLoss, self).__init__()
+        self.image_dim = image_dim
+        self.sqrt_2d = np.sqrt(2 * image_dim)
+        
+    def forward(self, output, clean_images, noisy_images, sigma):
+        """
+        Compute Loss Type 9.
+        
+        Args:
+            output: Model output (z-score prediction), shape (batch_size, 1) or (batch_size,)
+            clean_images: Clean images x_tilde, shape (batch_size, C, H, W)
+            noisy_images: Noisy images x, shape (batch_size, C, H, W)
+            sigma: Noise level sigma, shape (batch_size,) or (batch_size, 1)
+            
+        Returns:
+            Loss value (scalar)
+        """
+        batch_size = clean_images.size(0)
+        
+        # Flatten images
+        clean_flat = clean_images.view(batch_size, -1)
+        noisy_flat = noisy_images.view(batch_size, -1)
+        
+        # Ensure sigma is 1D
+        if sigma.dim() > 1:
+            sigma = sigma.squeeze()
+        
+        # Compute epsilon = (x - x_tilde) / sigma
+        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
+        
+        # Compute ||epsilon||^2
+        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
+        
+        # Target: (||epsilon||^2 - d) / sqrt(2*d)
+        # This is the z-score of the chi-squared distribution
+        target = (epsilon_norm_sq - self.image_dim) / self.sqrt_2d
+        
+        # Ensure output is 1D
+        if output.dim() > 1:
+            output = output.squeeze()
+        
+        # Compute MSE loss
+        loss = torch.mean((output - target) ** 2)
         
         return loss
 
@@ -549,10 +614,11 @@ def print_loss_info():
         ("omega_epsilon", "Epsilon-based: (ω - ||ε||²/σ)²"),
         ("omega_chi_approx", "Chi-squared approx: (ω - (d+√(2d)Z)/σ)²"),
         ("omega_chi_mean", "Expected chi-squared: (ω - d/σ)²"),
-        ("sigma_direct", "Direct sigma: (ω' - σ)², where ω'=d/output"),
-        ("sigma_normalized", "Normalized sigma: (ω' - σ)²/σ"),
-        ("sigma_relative", "Relative sigma: (ω' - σ)²/σ²"),
-        ("sigma_calibrated", "Calibrated sigma: (ω' - (σ_cal - σ))²"),
+        ("sigma_direct", "Direct sigma: (output - σ)²"),
+        ("sigma_normalized", "Normalized sigma: (output - σ)²/σ"),
+        ("sigma_relative", "Relative sigma: (output - σ)²/σ²"),
+        ("sigma_calibrated", "Calibrated sigma: (output - (σ_cal - σ))²"),
+        ("omega_chi_zscore", "Chi z-score: (output - (||ε||²-d)/√(2d))²"),
     ]
     
     for i, (name, desc) in enumerate(loss_info, 1):
