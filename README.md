@@ -263,11 +263,11 @@ If you use this code in your research, please cite:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is free and open source and may be used, modified, and distributed for research, educational, and commercial purposes without restriction.
 
 ## 🙏 Acknowledgments
 
-- Inspired by the `cifar-noise-estimation` repository
+- Inspired by the [`cifar-noise-estimation` repository](https://github.com/mehdeh/cifar-noise-estimation)
 - Built with PyTorch and modern ML best practices
 - Mathematical formulation based on:
   - Score-based generative modeling [Song et al., 2021]
