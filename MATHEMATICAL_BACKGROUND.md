@@ -294,11 +294,13 @@ $$
 **Description**: Direct estimation using the corrected objective (Section 5).
 
 **Target**:
+
 $$
 \hat{\omega}_{\text{target}} = \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3}
 $$
 
 **Loss Function**:
+
 $$
 \mathcal{L}_1 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3}\right)^2
 $$
