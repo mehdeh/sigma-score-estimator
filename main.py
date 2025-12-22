@@ -307,7 +307,9 @@ def main():
     train_parser.add_argument('--model-type', type=str, choices=['omega_x', 'omega_x_sigma'],
                              help='Model type')
     train_parser.add_argument('--loss-type', type=str, 
-                             choices=['omega_hat', 'normalized', 'relative', 'sigma_cal'],
+                             choices=['omega_hat', 'omega_epsilon', 'omega_chi_approx', 
+                                     'omega_chi_mean', 'sigma_direct', 'sigma_normalized', 
+                                     'sigma_relative', 'sigma_calibrated'],
                              help='Loss function type')
     train_parser.add_argument('--noise-strategy', type=str,
                              choices=['uniform', 'log_uniform', 'select_batch'],
