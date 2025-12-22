@@ -249,7 +249,8 @@ $$
 $$
 
 **Key distinction**:
-- $\omega_\theta(\mathbf{x}, \sigma)$ estimates $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
+- $\omega_\theta(\mathbf{x}, \sigma)$ estimates $\nabla_\sigma \log p(\mathbf{x}, \sigma)$ 
+
 - $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ estimates $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$
 
 The modified loss ensures that $\sigma$ decreases monotonically, enabling better mode coverage in multimodal distributions.
@@ -314,11 +315,13 @@ $$
 **Description**: Estimation using the noise $\epsilon$ directly.
 
 **Target**: 
+
 $$
 \hat{\omega}_{\text{target}} = \frac{\lVert\epsilon\rVert_2^2}{\sigma}
 $$
 
-**Loss Function**: 
+**Loss Function**:
+
 $$
 \mathcal{L}_2 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert\epsilon\rVert_2^2}{\sigma}\right)^2
 $$
@@ -332,11 +335,13 @@ $$
 **Description**: Uses the normal approximation of the chi-squared distribution.
 
 **Target**:
+
 $$
 \hat{\omega}_{\text{target}} = \frac{d + \sqrt{2d} \cdot Z}{\sigma}, \quad Z \sim \mathcal{N}(0, 1)
 $$
 
 **Loss Function**:
+
 $$
 \mathcal{L}_3 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d + \sqrt{2d} \cdot Z}{\sigma}\right)^2
 $$
@@ -350,11 +355,13 @@ $$
 **Description**: Uses the expected value of $\lVert\epsilon\rVert_2^2$.
 
 **Target**:
+
 $$
 \hat{\omega}_{\text{target}} = \frac{d}{\sigma}
 $$
 
 **Loss Function**:
+
 $$
 \mathcal{L}_4 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d}{\sigma}\right)^2
 $$
@@ -368,16 +375,19 @@ $$
 **Description**: Introduces $\acute{\omega}_\theta$ which directly estimates $\sigma$.
 
 **Definition**:
+
 $$
 \hat{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\acute{\omega}_\theta(\mathbf{x}, \sigma)}
 $$
 
 **Transformation**:
+
 $$
 \acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\hat{\omega}_\theta(\mathbf{x}, \sigma)}
 $$
 
 **Loss Function**:
+
 $$
 \mathcal{L}_5 = \left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2
 $$
@@ -391,6 +401,7 @@ $$
 **Description**: Normalized version of direct sigma estimation.
 
 **Loss Function**:
+
 $$
 \mathcal{L}_6 = \frac{\left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2}{\sigma}
 $$
@@ -404,6 +415,7 @@ $$
 **Description**: Relative error formulation for sigma estimation.
 
 **Loss Function**:
+
 $$
 \mathcal{L}_7 = \frac{\left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2}{\sigma^2}
 $$
@@ -417,6 +429,7 @@ $$
 **Description**: Calibrated formulation similar to Sigma-Cal Loss [4].
 
 **Loss Function**:
+
 $$
 \mathcal{L}_8 = \left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - (\sigma_{\text{cal}} - \sigma)\right)^2
 $$
