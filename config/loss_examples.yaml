@@ -1,0 +1,202 @@
+# Example configurations for different loss types
+# Copy one of these configurations to create your own custom config
+
+# ============================================================================
+# OMEGA-BASED LOSSES (Types 1-4): Direct estimation of omega
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Loss Type 1: omega_hat (Original Formulation)
+# ---------------------------------------------------------------------------
+# Target: ||x - x̃||² / σ³
+# Description: Baseline formulation without approximations
+# ---------------------------------------------------------------------------
+omega_hat_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.00001
+    sigma_max: 4.0
+    strategy: "uniform"
+  
+  training:
+    loss_type: "omega_hat"
+    epochs: 100
+    learning_rate: 0.001
+
+# ---------------------------------------------------------------------------
+# Loss Type 2: omega_epsilon (Epsilon-Based)
+# ---------------------------------------------------------------------------
+# Target: ||ε||² / σ
+# Description: More numerically stable for small sigma
+# ---------------------------------------------------------------------------
+omega_epsilon_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.00001  # Can use smaller values due to stability
+    sigma_max: 4.0
+    strategy: "log_uniform"  # Recommended for this loss
+  
+  training:
+    loss_type: "omega_epsilon"
+    epochs: 100
+    learning_rate: 0.001
+
+# ---------------------------------------------------------------------------
+# Loss Type 3: omega_chi_approx (Chi-Squared Approximation)
+# ---------------------------------------------------------------------------
+# Target: (d + √(2d) * Z) / σ, where Z ~ N(0,1)
+# Description: Uses normal approximation of chi-squared distribution
+# ---------------------------------------------------------------------------
+omega_chi_approx_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.0001
+    sigma_max: 4.0
+    strategy: "uniform"
+  
+  training:
+    loss_type: "omega_chi_approx"
+    epochs: 100
+    learning_rate: 0.001
+
+# ---------------------------------------------------------------------------
+# Loss Type 4: omega_chi_mean (Expected Chi-Squared)
+# ---------------------------------------------------------------------------
+# Target: d / σ
+# Description: Deterministic target based on expectation
+# ---------------------------------------------------------------------------
+omega_chi_mean_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.0001
+    sigma_max: 4.0
+    strategy: "uniform"
+  
+  training:
+    loss_type: "omega_chi_mean"
+    epochs: 100
+    learning_rate: 0.001
+    early_stopping: true
+    patience: 15  # May converge quickly
+
+# ============================================================================
+# SIGMA-BASED LOSSES (Types 5-8): Indirect estimation via sigma prediction
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Loss Type 5: sigma_direct (Direct Sigma Estimation)
+# ---------------------------------------------------------------------------
+# Transformation: ω' = d / output
+# Target: σ
+# Description: Network learns to predict sigma directly
+# ---------------------------------------------------------------------------
+sigma_direct_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.01
+    sigma_max: 4.0
+    strategy: "uniform"
+  
+  training:
+    loss_type: "sigma_direct"
+    epochs: 100
+    learning_rate: 0.0005  # May need lower LR for stability
+
+# ---------------------------------------------------------------------------
+# Loss Type 6: sigma_normalized (Normalized Sigma Estimation)
+# ---------------------------------------------------------------------------
+# Loss: (ω' - σ)² / σ
+# Description: Normalizes by sigma to weight errors at different noise levels
+# ---------------------------------------------------------------------------
+sigma_normalized_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.01
+    sigma_max: 4.0
+    strategy: "log_uniform"  # Recommended for normalized losses
+  
+  training:
+    loss_type: "sigma_normalized"
+    epochs: 100
+    learning_rate: 0.0005
+
+# ---------------------------------------------------------------------------
+# Loss Type 7: sigma_relative (Relative Sigma Estimation)
+# ---------------------------------------------------------------------------
+# Loss: (ω' - σ)² / σ²
+# Description: Scale-invariant relative error formulation
+# ---------------------------------------------------------------------------
+sigma_relative_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.01
+    sigma_max: 4.0
+    strategy: "log_uniform"  # Recommended for relative losses
+  
+  training:
+    loss_type: "sigma_relative"
+    epochs: 100
+    learning_rate: 0.0005
+
+# ---------------------------------------------------------------------------
+# Loss Type 8: sigma_calibrated (Calibrated Sigma Estimation)
+# ---------------------------------------------------------------------------
+# Target: σ_cal - σ
+# Description: Calibrated formulation with learnable parameter
+# ---------------------------------------------------------------------------
+sigma_calibrated_config:
+  model:
+    type: "omega_x_sigma"
+  
+  noise:
+    sigma_min: 0.01
+    sigma_max: 4.0
+    strategy: "uniform"
+  
+  training:
+    loss_type: "sigma_calibrated"
+    sigma_cal: 1.0  # Calibration parameter (experiment with different values)
+    epochs: 100
+    learning_rate: 0.0005
+
+# ============================================================================
+# USAGE INSTRUCTIONS
+# ============================================================================
+# 
+# To use one of these configurations:
+# 
+# 1. Copy the desired configuration block to a new file, e.g.:
+#    cp config/loss_examples.yaml config/my_experiment.yaml
+# 
+# 2. Edit the file to include only the configuration you want, and add
+#    common parameters like data, checkpoint, logging, etc.
+# 
+# 3. Run training:
+#    python main.py train --config config/my_experiment.yaml
+# 
+# ============================================================================
+# RECOMMENDATIONS
+# ============================================================================
+# 
+# - For baseline experiments: Use omega_hat
+# - For small sigma values: Use omega_epsilon or sigma-based losses
+# - For scale-invariance: Use sigma_relative
+# - For fast convergence: Use omega_chi_mean or sigma_direct
+# - For exploration: Try omega_chi_approx with stochastic sampling
+# 
+# ============================================================================
+

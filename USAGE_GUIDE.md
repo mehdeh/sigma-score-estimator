@@ -321,10 +321,19 @@ seed: 42
 
 #### Loss Functions
 
-- `omega_hat`: Main theoretically-derived loss (recommended)
-- `normalized`: Loss normalized by sigma
-- `relative`: Relative error loss
-- `sigma_cal`: Uses calculated sigma standard deviation
+**Omega-Based Losses** (Direct estimation of ω):
+- `omega_hat`: Original formulation - ||x - x̃||² / σ³ (baseline)
+- `omega_epsilon`: Epsilon-based - ||ε||² / σ (more stable for small σ)
+- `omega_chi_approx`: Chi-squared approximation with stochastic sampling
+- `omega_chi_mean`: Expected chi-squared value (deterministic target)
+
+**Sigma-Based Losses** (Indirect via σ estimation):
+- `sigma_direct`: Direct sigma estimation ω' = d/output, target = σ
+- `sigma_normalized`: Normalized by σ for balanced weighting
+- `sigma_relative`: Relative error formulation (scale-invariant)
+- `sigma_calibrated`: Calibrated estimation with σ_cal parameter
+
+For mathematical details, see [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md)
 
 #### Noise Sampling Strategies
 

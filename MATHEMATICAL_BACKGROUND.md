@@ -1,170 +1,249 @@
-# Mathematical Background
-
-This document provides the mathematical foundation for training the $\omega_{\phi}(\mathbf{x}, \sigma)$ model to estimate the noise-level score gradient $\nabla_\sigma \log p(\mathbf{x}, \sigma)$.
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Problem Formulation](#problem-formulation)
-3. [Relationship Between Denoiser and Score Function](#relationship-between-denoiser-and-score-function)
-4. [Deriving the Noise-Level Score Gradient](#deriving-the-noise-level-score-gradient)
-5. [Loss Function for Training](#loss-function-for-training)
-6. [Implementation Details](#implementation-details)
+# Mathematical Background: Omega Estimation
 
 ## Overview
 
-In diffusion models, we often need to estimate two gradients:
-- $\nabla_{\mathbf{x}} \log p(\mathbf{x}, \sigma)$: The data-space score function
-- $\nabla_\sigma \log p(\mathbf{x}, \sigma)$: The noise-level score gradient
+This document provides the mathematical foundation for estimating $\omega(\mathbf{x}, \sigma)$, which is derived from the score function of noisy data. We present multiple loss function formulations for training neural networks to estimate $\omega$ or related quantities.
 
-This repository focuses on estimating the noise-level score gradient using a neural network $\omega_{\phi}(\mathbf{x}, \sigma)$.
+## Core Definitions
 
-## Problem Formulation
+### Score Function and Omega
 
-Given a clean data sample $\tilde{\mathbf{x}} \sim p_{\text{data}}$, we add Gaussian noise with standard deviation $\sigma$ to obtain noisy data:
+Given clean data $\tilde{\mathbf{x}}$ and noisy observation $\mathbf{x} \sim \mathcal{N}(\tilde{\mathbf{x}}, \sigma^2 \mathbf{I})$, the score function is:
 
-$$\mathbf{x} \sim \mathcal{N}(\tilde{\mathbf{x}}, \sigma^2 \mathbf{I})$$
+$$
+\nabla_{\mathbf{x}} \log p(\mathbf{x} | \sigma) = -\frac{\mathbf{x} - \tilde{\mathbf{x}}}{\sigma^2}
+$$
 
-The joint distribution of noisy data is:
+The quantity $\omega$ is defined as:
 
-$$p(\mathbf{x}, \sigma) = \int p_{\text{data}}(\tilde{\mathbf{x}}) \, \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) \, d\tilde{\mathbf{x}}$$
+$$
+\omega(\mathbf{x}, \sigma) = \lVert \nabla_{\mathbf{x}} \log p(\mathbf{x} | \sigma) \rVert_2^2 = \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^4}
+$$
 
-Our goal is to estimate $\nabla_\sigma \log p(\mathbf{x}, \sigma)$.
+### Noise Parameterization
 
-## Relationship Between Denoiser and Score Function
+Using the reparameterization trick, we can write:
 
-### Optimal Denoising Function
+$$
+\mathbf{x} = \tilde{\mathbf{x}} + \sigma \epsilon, \quad \epsilon \sim \mathcal{N}(0, \mathbf{I})
+$$
 
-The optimal denoising function $D^*(\mathbf{x}, \sigma)$ minimizes the expected MSE loss:
+Therefore:
 
-$$\mathcal{L}(D; \sigma) = \mathbb{E}_{\tilde{\mathbf{x}} \sim p_{\text{data}}} \mathbb{E}_{\mathbf{z} \sim \mathcal{N}(\mathbf{0}, \sigma^2 \mathbf{I})} \lVert D(\tilde{\mathbf{x}} + \mathbf{z}, \sigma) - \tilde{\mathbf{x}} \rVert^2_2$$
+$$
+\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2 = \sigma^2 \lVert \epsilon \rVert_2^2
+$$
 
-Taking the gradient with respect to $D$ and setting it to zero yields the closed-form solution:
+### Chi-Squared Distribution Properties
 
-$$D^*(\mathbf{x}, \sigma) = \frac{\int p_{\text{data}}(\tilde{\mathbf{x}}) \, \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) \, \tilde{\mathbf{x}} \, d\tilde{\mathbf{x}}}{p(\mathbf{x}, \sigma)}$$
+Since $\epsilon \sim \mathcal{N}(0, \mathbf{I})$ with dimension $d$ (e.g., $d = 3 \times 32 \times 32 = 3072$ for CIFAR-10), we have:
 
-This is the conditional expectation: $D^*(\mathbf{x}, \sigma) = \mathbb{E}[\tilde{\mathbf{x}} | \mathbf{x}, \sigma]$
+$$
+\lVert \epsilon \rVert_2^2 \sim \chi^2_d
+$$
 
-### Connection to Score Function
+**Key properties:**
+- **Expectation**: $\mathbb{E}[\lVert \epsilon \rVert_2^2] = d$
+- **Variance**: $\text{Var}[\lVert \epsilon \rVert_2^2] = 2d$
+- **Normal approximation**: $\lVert \epsilon \rVert_2^2 \approx d + \sqrt{2d} \cdot Z$, where $Z \sim \mathcal{N}(0, 1)$
 
-The data-space score function is related to the denoiser by:
+---
 
-$$\nabla_{\mathbf{x}} \log p(\mathbf{x}, \sigma) = -\frac{1}{\sigma^2} \left[ \mathbf{x} - D(\mathbf{x}, \sigma) \right]$$
+## Loss Function Formulations
 
-**Proof:** Starting from the definition of the score function and using properties of Gaussian distributions:
+We present eight different loss function formulations for training neural networks to estimate $\omega$ or related quantities.
 
-$$\nabla_{\mathbf{x}} \log p(\mathbf{x}, \sigma) = \frac{\nabla_{\mathbf{x}} p(\mathbf{x}, \sigma)}{p(\mathbf{x}, \sigma)}$$
+### Loss Type 1: `omega_hat` (Original Formulation)
 
-$$= \frac{\int p_{\text{data}}(\tilde{\mathbf{x}}) \, \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) \left[ -\frac{\mathbf{x} - \tilde{\mathbf{x}}}{\sigma^2} \right] d\tilde{\mathbf{x}}}{p(\mathbf{x}, \sigma)}$$
+**Description**: Direct estimation of $\omega$ using the exact form.
 
-$$= -\frac{1}{\sigma^2} \left[ \mathbf{x} - D(\mathbf{x}, \sigma) \right]$$
+**Target**:
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3}
+$$
 
-## Deriving the Noise-Level Score Gradient
+**Loss Function**:
+$$
+\mathcal{L}_1 = \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} \right)^2
+$$
 
-### Gradient of Log-Probability w.r.t. Sigma
+**Note**: This is the baseline formulation with no approximations.
 
-We need to compute $\nabla_\sigma \log p(\mathbf{x}, \sigma)$. Starting with the Gaussian PDF:
+---
 
-$$\log \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) = -\frac{d}{2} \log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2$$
+### Loss Type 2: `omega_epsilon` (Epsilon-Based Formulation)
 
-Taking the gradient with respect to $\sigma$:
+**Description**: Estimation of $\omega$ using the noise $\epsilon$ directly.
 
-$$\nabla_\sigma \log \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) = -\frac{d}{\sigma} + \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3}$$
+**Target** (using $\mathbf{x} = \tilde{\mathbf{x}} + \sigma \epsilon$):
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert \epsilon \rVert_2^2}{\sigma}
+$$
 
-### Closed-Form Expression
+**Loss Function**:
+$$
+\mathcal{L}_2 = \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert \epsilon \rVert_2^2}{\sigma} \right)^2
+$$
 
-The noise-level score gradient has the closed form:
+**Advantage**: More numerically stable when $\sigma$ is small.
 
-$$\nabla_\sigma \log p(\mathbf{x}, \sigma) = \frac{\int p_{\text{data}}(\tilde{\mathbf{x}}) \, \mathcal{N}(\mathbf{x}; \tilde{\mathbf{x}}, \sigma^2 \mathbf{I}) \left[ \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} - \frac{d}{\sigma} \right] d\tilde{\mathbf{x}}}{p(\mathbf{x}, \sigma)}$$
+---
 
-This can be rewritten as:
+### Loss Type 3: `omega_chi_approx` (Chi-Squared Approximation)
 
-$$\nabla_\sigma \log p(\mathbf{x}, \sigma) = \mathbb{E}_{\tilde{\mathbf{x}} | \mathbf{x}, \sigma} \left[ \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} - \frac{d}{\sigma} \right]$$
+**Description**: Uses the normal approximation of the chi-squared distribution.
 
-## Loss Function for Training
+**Target** (using $\lVert \epsilon \rVert_2^2 \approx d + \sqrt{2d} \cdot Z$):
+$$
+\hat{\omega}_{\text{target}} = \frac{d + \sqrt{2d} \cdot Z}{\sigma}, \quad Z \sim \mathcal{N}(0, 1)
+$$
 
-### Modified Estimator
+**Loss Function**:
+$$
+\mathcal{L}_3 = \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d + \sqrt{2d} \cdot Z}{\sigma} \right)^2
+$$
 
-We define a modified estimator $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ related to $\omega_\theta(\mathbf{x}, \sigma)$ by:
+**Note**: $Z$ is sampled from standard normal distribution during training.
 
-$$\hat{\omega}_\theta(\mathbf{x}, \sigma) = \omega_\theta(\mathbf{x}, \sigma) + \frac{d}{\sigma}$$
+---
 
-This modification simplifies the loss function.
+### Loss Type 4: `omega_chi_mean` (Expected Chi-Squared)
 
-### Derived Loss Function
+**Description**: Uses the expected value of $\lVert \epsilon \rVert_2^2$.
 
-Through detailed derivation (see chapter3.tex equations 559-567), the loss function for training $\omega_{\phi}(\mathbf{x}, \sigma)$ is:
+**Target** (using $\mathbb{E}[\lVert \epsilon \rVert_2^2] = d$):
+$$
+\hat{\omega}_{\text{target}} = \frac{d}{\sigma}
+$$
 
-$$\mathcal{L}(\hat{\omega}; \sigma) = \mathbb{E}_{\tilde{\mathbf{x}} \sim p_{\text{data}}} \mathbb{E}_{\mathbf{x} \sim \mathcal{N}(\tilde{\mathbf{x}}, \sigma^2 \mathbf{I})} \left[ \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} \right)^2 \right]$$
+**Loss Function**:
+$$
+\mathcal{L}_4 = \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d}{\sigma} \right)^2
+$$
 
-This is the **primary loss function** used in this repository (loss_type: `omega_hat`).
+**Advantage**: Deterministic target, no stochastic sampling required.
 
-### Loss Interpretation
+---
 
-The loss minimizes the squared difference between:
-- **Model prediction**: $\hat{\omega}_\theta(\mathbf{x}, \sigma)$
-- **Target**: $\frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3}$
+### Loss Type 5: `sigma_direct` (Direct Sigma Estimation)
 
-Where:
-- $\mathbf{x}$ is the noisy image
-- $\tilde{\mathbf{x}}$ is the clean image
-- $\sigma$ is the noise level
-- $d$ is the data dimensionality (e.g., $d = 3072$ for CIFAR-10)
+**Description**: Introduces $\acute{\omega}_\theta$ which directly estimates $\sigma$.
 
-## Implementation Details
+**Definition**:
+$$
+\hat{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\acute{\omega}_\theta(\mathbf{x}, \sigma)}
+$$
 
-### Training Procedure
+**Transformation**:
+$$
+\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\text{output}_\theta(\mathbf{x}, \sigma)}
+$$
 
-1. **Sample** a clean image $\tilde{\mathbf{x}} \sim p_{\text{data}}$
-2. **Sample** a noise level $\sigma$ from the desired distribution
-3. **Add noise**: $\mathbf{x} = \tilde{\mathbf{x}} + \epsilon$ where $\epsilon \sim \mathcal{N}(0, \sigma^2 \mathbf{I})$
-4. **Forward pass**: Compute $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ using the neural network
-5. **Compute target**: $\text{target} = \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3}$
-6. **Compute loss**: $\mathcal{L} = (\hat{\omega}_\theta(\mathbf{x}, \sigma) - \text{target})^2$
-7. **Backpropagate** and update model parameters
+**Loss Function**:
+$$
+\mathcal{L}_5 = \left( \acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma \right)^2
+$$
 
-### Alternative Loss Functions
+**Interpretation**: The network learns to predict $\sigma$ directly, which is then inverted to obtain $\omega$.
 
-The repository also implements several alternative loss formulations for experimentation:
+---
 
-1. **Normalized Loss**:
-   $$\mathcal{L} = \frac{(\omega_\theta(\mathbf{x}, \sigma) - \sigma)^2}{\sigma}$$
+### Loss Type 6: `sigma_normalized` (Normalized Sigma Estimation)
 
-2. **Relative Loss**:
-   $$\mathcal{L} = \left(\frac{\omega_\theta(\mathbf{x}, \sigma)}{\sigma} - 1\right)^2$$
+**Description**: Normalized version of direct sigma estimation.
 
-3. **Sigma-Cal Loss**:
-   $$\mathcal{L} = (\omega_\theta(\mathbf{x}, \sigma) - (\sigma_{\text{cal}} - \sigma))^2$$
-   
-   Where $\sigma_{\text{cal}}$ is the empirical standard deviation of the added noise.
+**Transformation**:
+$$
+\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\text{output}_\theta(\mathbf{x}, \sigma)}
+$$
 
-### Noise Sampling Strategies
+**Loss Function**:
+$$
+\mathcal{L}_6 = \frac{\left( \acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma \right)^2}{\sigma}
+$$
 
-The distribution of $\sigma$ during training affects model performance:
+**Advantage**: Normalizes the loss by $\sigma$, giving more weight to errors at small noise levels.
 
-- **Uniform**: $\sigma \sim \mathcal{U}(\sigma_{\min}, \sigma_{\max})$
-- **Log-uniform**: $\log \sigma \sim \mathcal{U}(\log \sigma_{\min}, \log \sigma_{\max})$
-- **Pre-filtered batch**: Sample from a pre-defined set of values
+---
 
-## Key Equations Summary
+### Loss Type 7: `sigma_relative` (Relative Sigma Estimation)
 
-| Concept | Equation |
-|---------|----------|
-| Score function | $\nabla_{\mathbf{x}} \log p(\mathbf{x}, \sigma) = -\frac{1}{\sigma^2} [\mathbf{x} - D(\mathbf{x}, \sigma)]$ |
-| Noise-level score | $\nabla_\sigma \log p(\mathbf{x}, \sigma) = \mathbb{E}_{\tilde{\mathbf{x}} \| \mathbf{x}, \sigma} \left[ \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} - \frac{d}{\sigma} \right]$ |
-| Modified estimator | $\hat{\omega}_\theta(\mathbf{x}, \sigma) = \omega_\theta(\mathbf{x}, \sigma) + \frac{d}{\sigma}$ |
-| Training loss | $\mathcal{L} = \mathbb{E} \left[ \left( \hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert \mathbf{x} - \tilde{\mathbf{x}} \rVert_2^2}{\sigma^3} \right)^2 \right]$ |
+**Description**: Relative error formulation for sigma estimation.
+
+**Transformation**:
+$$
+\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\text{output}_\theta(\mathbf{x}, \sigma)}
+$$
+
+**Loss Function**:
+$$
+\mathcal{L}_7 = \frac{\left( \acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma \right)^2}{\sigma^2}
+$$
+
+**Advantage**: Emphasizes relative error, making the loss scale-invariant with respect to $\sigma$.
+
+---
+
+### Loss Type 8: `sigma_calibrated` (Calibrated Sigma Estimation)
+
+**Description**: Calibrated formulation similar to Sigma-Cal Loss.
+
+**Transformation**:
+$$
+\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\text{output}_\theta(\mathbf{x}, \sigma)}
+$$
+
+**Loss Function**:
+$$
+\mathcal{L}_8 = \left( \acute{\omega}_\theta(\mathbf{x}, \sigma) - (\sigma_{\text{cal}} - \sigma) \right)^2
+$$
+
+**Note**: $\sigma_{\text{cal}}$ is a calibration parameter that can be learned or set empirically. In the simplest case, $\sigma_{\text{cal}} = 0$ reduces to a sign-inverted version of Loss Type 5.
+
+---
+
+## Summary Table
+
+| Loss Type | Name | Target Quantity | Key Feature |
+|-----------|------|----------------|-------------|
+| 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Original formulation |
+| 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based |
+| 3 | `omega_chi_approx` | $\frac{d + \sqrt{2d} Z}{\sigma}$ | Chi-squared approximation |
+| 4 | `omega_chi_mean` | $\frac{d}{\sigma}$ | Expected value |
+| 5 | `sigma_direct` | $\sigma$ | Direct sigma prediction |
+| 6 | `sigma_normalized` | $\sigma$ (normalized) | Weighted by $1/\sigma$ |
+| 7 | `sigma_relative` | $\sigma$ (relative) | Scale-invariant |
+| 8 | `sigma_calibrated` | $\sigma_{\text{cal}} - \sigma$ | Calibrated prediction |
+
+---
+
+## Implementation Notes
+
+### Model Output Interpretation
+
+For **Loss Types 1-4**, the model directly outputs $\hat{\omega}_\theta(\mathbf{x}, \sigma)$.
+
+For **Loss Types 5-8**, the model output is transformed:
+$$
+\text{output}_\theta \rightarrow \acute{\omega}_\theta = \frac{d}{\text{output}_\theta}
+$$
+
+where $d$ is the image dimensionality (e.g., $d = 3072$ for CIFAR-10 images of size $32 \times 32 \times 3$).
+
+### Numerical Stability
+
+- For Loss Types 5-8, ensure $\text{output}_\theta > \epsilon$ (small positive constant) to avoid division by zero.
+- Use appropriate activation functions (e.g., softplus, exponential) to ensure positive outputs.
+
+### Training Considerations
+
+- Loss Types 1-2 estimate $\omega$ directly and require $\sigma^3$ or $\sigma$ normalization.
+- Loss Type 3 introduces stochasticity through sampling $Z \sim \mathcal{N}(0, 1)$.
+- Loss Type 4 provides a deterministic target based on expectation.
+- Loss Types 5-8 estimate $\sigma$ (or related quantities) and are then inverted to obtain $\omega$.
+
+---
 
 ## References
 
-For the complete mathematical derivation with all intermediate steps, see `sigma_model/chapter3.tex` lines 189-654.
-
-## Notes
-
-- The dimension $d = C \times H \times W$ where $C$ is the number of channels, $H$ is height, and $W$ is width
-- For CIFAR-10: $d = 3 \times 32 \times 32 = 3072$
-- The loss function is derived to be an unbiased estimator of the true gradient
-- Two model variants are supported:
-  - $\omega_{\phi}(\mathbf{x})$: Noise level implicit in training
-  - $\omega_{\phi}(\mathbf{x}, \sigma)$: Noise level as explicit input
-
+This formulation builds upon score matching and denoising techniques in diffusion models, extending the framework to explicitly estimate the magnitude of the score function.

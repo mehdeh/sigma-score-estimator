@@ -61,10 +61,13 @@ class OmegaEvaluator:
         
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
+        sigma_cal = config['training'].get('sigma_cal', 0.0)
         self.loss_fn = LossFactory.get_loss(
             config['training']['loss_type'],
-            image_dim=image_dim
+            image_dim=image_dim,
+            sigma_cal=sigma_cal
         )
+        self.image_dim = image_dim
         
         # Initialize logger
         log_file = os.path.join(exp_dir, 'test.log')
@@ -122,29 +125,44 @@ class OmegaEvaluator:
                 # Compute target based on loss type
                 loss_type = self.config['training']['loss_type']
                 
+                # Compute common quantities
+                diff = noisy_images - images
+                diff_flat = diff.view(diff.size(0), -1)
+                norm_squared = (diff_flat ** 2).sum(dim=1)
+                
                 if loss_type == 'omega_hat':
                     # Target: ||x - x_tilde||^2 / sigma^3
-                    diff = noisy_images - images
-                    diff_flat = diff.view(diff.size(0), -1)
-                    norm_squared = (diff_flat ** 2).sum(dim=1)
                     target = norm_squared / (sigma ** 3)
-                elif loss_type == 'normalized':
-                    # Target: sigma (model learns to predict sigma directly)
+                    
+                elif loss_type == 'omega_epsilon':
+                    # Target: ||epsilon||^2 / sigma
+                    epsilon = diff_flat / sigma.view(-1, 1)
+                    epsilon_norm_sq = (epsilon ** 2).sum(dim=1)
+                    target = epsilon_norm_sq / sigma
+                    
+                elif loss_type == 'omega_chi_approx':
+                    # Target: (d + sqrt(2*d) * Z) / sigma
+                    # Note: Z is sampled in loss function, here we use actual epsilon norm
+                    epsilon_norm_sq = norm_squared / (sigma ** 2)
+                    target = epsilon_norm_sq / sigma
+                    
+                elif loss_type == 'omega_chi_mean':
+                    # Target: d / sigma
+                    target = self.image_dim / sigma
+                    
+                elif loss_type in ['sigma_direct', 'sigma_normalized', 'sigma_relative']:
+                    # For sigma-based losses, we need to compute omega_acute from output
+                    # omega_acute = d / output
+                    # Target is sigma for comparison
                     target = sigma
-                elif loss_type == 'relative':
-                    # Target: sigma (model learns to predict sigma, loss normalized by sigma)
-                    target = sigma
-                elif loss_type == 'sigma_cal':
-                    # Target: std(noise) - sigma
-                    noise = noisy_images - images
-                    noise_flat = noise.view(noise.size(0), -1)
-                    sigma_cal_std = torch.std(noise_flat, dim=1)
-                    target = sigma_cal_std - sigma
+                    
+                elif loss_type == 'sigma_calibrated':
+                    # Target: sigma_cal - sigma
+                    sigma_cal = self.config['training'].get('sigma_cal', 0.0)
+                    target = sigma_cal - sigma
+                    
                 else:
                     # Fallback to omega_hat
-                    diff = noisy_images - images
-                    diff_flat = diff.view(diff.size(0), -1)
-                    norm_squared = (diff_flat ** 2).sum(dim=1)
                     target = norm_squared / (sigma ** 3)
                 
                 # Compute loss

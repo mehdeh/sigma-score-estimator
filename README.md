@@ -13,8 +13,10 @@ This repository implements deep learning models that estimate the gradient of lo
   - $\omega_{\phi}(\mathbf{x}, \sigma)$: Image and noise level input
 
 - **Multiple Loss Functions:**
-  - Theoretically derived loss from mathematical formulation
-  - Alternative loss variants for experimentation
+  - 8 different loss formulations based on statistical properties
+  - Omega-based losses (Types 1-4): Direct estimation of score magnitude
+  - Sigma-based losses (Types 5-8): Indirect estimation via noise level prediction
+  - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for details
   
 - **Flexible Noise Sampling:**
   - Uniform sampling
@@ -131,9 +133,12 @@ noise:
   strategy: "uniform"
   
 training:
-  loss_type: "omega_hat"
+  loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_approx,
+                          #          omega_chi_mean, sigma_direct, sigma_normalized,
+                          #          sigma_relative, sigma_calibrated
   epochs: 100
   learning_rate: 0.001
+  sigma_cal: 0.0          # Calibration parameter (for sigma_calibrated loss)
 ```
 
 ## 📈 Monitoring Training
