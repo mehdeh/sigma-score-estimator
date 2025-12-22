@@ -12,32 +12,59 @@ def plot_loss_curves(train_losses, val_losses, save_path=None, show=False):
     """
     Plot training and validation loss curves.
     
+    Creates two subplots: regular loss and logarithmic loss.
+    
     Args:
         train_losses (list): List of training losses per epoch
         val_losses (list): List of validation losses per epoch
         save_path (str, optional): Path to save the plot
         show (bool): Whether to display the plot
     """
-    plt.figure(figsize=(10, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
     epochs = range(1, len(train_losses) + 1)
     
-    plt.plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
-    plt.plot(epochs, val_losses, 'r-', label='Validation Loss', linewidth=2)
+    # Convert to numpy arrays for easier manipulation
+    train_losses_arr = np.array(train_losses)
+    val_losses_arr = np.array(val_losses)
     
-    plt.xlabel('Epoch', fontsize=12)
-    plt.ylabel('Loss', fontsize=12)
-    plt.title('Training and Validation Loss', fontsize=14)
-    plt.legend(fontsize=10)
-    plt.grid(True, alpha=0.3)
+    # Left subplot: Regular loss
+    ax1.plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
+    ax1.plot(epochs, val_losses, 'r-', label='Validation Loss', linewidth=2)
     
-    # Add best epoch marker
+    ax1.set_xlabel('Epoch', fontsize=12)
+    ax1.set_ylabel('Loss', fontsize=12)
+    ax1.set_title('Training and Validation Loss', fontsize=14)
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    
+    # Add best epoch marker on left plot
     if val_losses:
         best_epoch = np.argmin(val_losses) + 1
         best_loss = min(val_losses)
-        plt.axvline(x=best_epoch, color='g', linestyle='--', alpha=0.5, 
+        ax1.axvline(x=best_epoch, color='g', linestyle='--', alpha=0.5, 
                     label=f'Best Epoch: {best_epoch}')
-        plt.plot(best_epoch, best_loss, 'g*', markersize=15)
-        plt.legend(fontsize=10)
+        ax1.plot(best_epoch, best_loss, 'g*', markersize=15)
+        ax1.legend(fontsize=10)
+    
+    # Right subplot: Logarithmic loss
+    ax2.plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
+    ax2.plot(epochs, val_losses, 'r-', label='Validation Loss', linewidth=2)
+    
+    ax2.set_xlabel('Epoch', fontsize=12)
+    ax2.set_ylabel('Loss (Log Scale)', fontsize=12)
+    ax2.set_title('Training and Validation Loss (Logarithmic)', fontsize=14)
+    ax2.set_yscale('log')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3, which='both')
+    
+    # Add best epoch marker on right plot
+    if val_losses:
+        best_epoch = np.argmin(val_losses) + 1
+        best_loss = min(val_losses)
+        ax2.axvline(x=best_epoch, color='g', linestyle='--', alpha=0.5, 
+                    label=f'Best Epoch: {best_epoch}')
+        ax2.plot(best_epoch, best_loss, 'g*', markersize=15)
+        ax2.legend(fontsize=10)
     
     plt.tight_layout()
     
