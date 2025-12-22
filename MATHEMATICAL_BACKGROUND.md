@@ -313,12 +313,12 @@ $$
 
 **Description**: Estimation using the noise $\epsilon$ directly.
 
-**Target**:
+**Target**: 
 $$
 \hat{\omega}_{\text{target}} = \frac{\lVert\epsilon\rVert_2^2}{\sigma}
 $$
 
-**Loss Function**:
+**Loss Function**: 
 $$
 \mathcal{L}_2 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{\lVert\epsilon\rVert_2^2}{\sigma}\right)^2
 $$
