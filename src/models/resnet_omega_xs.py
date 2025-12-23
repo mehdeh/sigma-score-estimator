@@ -50,11 +50,14 @@ class ResNetOmegaXSigma(nn.Module):
     ResNet18-based model for estimating omega(x, sigma).
     
     This model estimates the noise-level score gradient for a given noisy image
-    conditioned on the noise level sigma.
+    conditioned on the noise level sigma. The architecture uses a two-layer
+    feature fusion network with batch normalization and dropout for better
+    regularization and feature integration.
     
     Args:
         block: The residual block class to use (e.g., BasicBlock)
         num_blocks: List of integers specifying the number of blocks in each layer
+        dropout_rate: Dropout probability for regularization (default: 0.1)
     
     Input:
         x: RGB image tensor of shape (batch_size, 3, 32, 32)
@@ -64,7 +67,7 @@ class ResNetOmegaXSigma(nn.Module):
         Scalar tensor of shape (batch_size, 1) representing omega(x, sigma)
     """
     
-    def __init__(self, block=BasicBlock, num_blocks=[2, 2, 2, 2]):
+    def __init__(self, block=BasicBlock, num_blocks=[2, 2, 2, 2], dropout_rate=0.1):
         super(ResNetOmegaXSigma, self).__init__()
         self.in_planes = 64
 
@@ -78,11 +81,15 @@ class ResNetOmegaXSigma(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
 
-        # Embedding layer to combine image features and sigma scalar
-        self.fc_embedding = nn.Linear(512 * block.expansion + 1, 512)
-
+        # Embedding layers to combine image features and sigma scalar
+        # Using two layers for better feature fusion
+        self.fc_embedding1 = nn.Linear(512 * block.expansion + 1, 512)
+        self.bn_embedding = nn.BatchNorm1d(512)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.fc_embedding2 = nn.Linear(512, 256)
+        
         # Final regression output
-        self.fc_out = nn.Linear(512, 1)
+        self.fc_out = nn.Linear(256, 1)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -120,21 +127,31 @@ class ResNetOmegaXSigma(nn.Module):
         # Concatenate the scalar sigma with the features from the image
         combined_input = torch.cat((out, sigma), dim=1)
 
-        # Pass the combined input through the embedding layer
-        # Note: No ReLU activation here to match the original draft implementation
-        embedded = self.fc_embedding(combined_input)
+        # Pass through embedding layers with nonlinear activations
+        # This allows the network to learn complex interactions between image features and sigma
+        embedded = self.fc_embedding1(combined_input)
+        embedded = self.bn_embedding(embedded)
+        embedded = F.relu(embedded)
+        embedded = self.dropout(embedded)
+        
+        # Second embedding layer for deeper feature fusion
+        embedded = self.fc_embedding2(embedded)
+        embedded = F.relu(embedded)
 
         # Final regression output
         output = self.fc_out(embedded)
         return output
 
 
-def resnet18_omega_xs():
+def resnet18_omega_xs(dropout_rate=0.1):
     """
     Create a ResNet18-based model for omega(x, sigma) estimation.
+    
+    Args:
+        dropout_rate: Dropout rate for regularization (default: 0.1)
     
     Returns:
         ResNetOmegaXSigma model instance
     """
-    return ResNetOmegaXSigma(BasicBlock, [2, 2, 2, 2])
+    return ResNetOmegaXSigma(BasicBlock, [2, 2, 2, 2], dropout_rate=dropout_rate)
 
