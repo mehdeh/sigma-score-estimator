@@ -30,6 +30,18 @@ from src.utils import (
 )
 
 
+def str_to_bool(v):
+    """Convert string to boolean for argparse."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def set_seed(seed):
     """Set random seed for reproducibility."""
     random.seed(seed)
@@ -323,6 +335,7 @@ def main():
     train_parser.add_argument('--seed', type=int, help='Random seed')
     train_parser.add_argument('--exp-dir', type=str, help='Experiment directory')
     train_parser.add_argument('--resume', type=str, help='Resume from checkpoint')
+    train_parser.add_argument('--early-stopping', type=str_to_bool, help='Enable/disable early stopping (true/false)')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test a trained model')

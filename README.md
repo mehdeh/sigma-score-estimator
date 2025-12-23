@@ -60,7 +60,8 @@ python main.py train \
     --config config/model_x_sigma.yaml \
     --epochs 100 \
     --learning-rate 0.001 \
-    --batch-size 128
+    --batch-size 128 \
+    --early-stopping true
 
 # Train omega(x) model (image-only)
 python main.py train --config config/model_x.yaml
