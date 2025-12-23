@@ -79,9 +79,24 @@ python main.py train \
     --sigma-max 10.0 \
     --epochs 150 \
     --learning-rate 0.0005 \
+    --early-stopping true \
     --device cuda \
     --seed 42
 ```
+
+### Early Stopping Control
+
+Enable or disable early stopping via CLI:
+
+```bash
+# Enable early stopping (default behavior)
+python main.py train --config config/default.yaml --early-stopping true
+
+# Disable early stopping
+python main.py train --config config/default.yaml --early-stopping false
+```
+
+When enabled, training will stop early if validation loss doesn't improve for `patience` epochs (configured in the config file).
 
 ### Resume Training
 

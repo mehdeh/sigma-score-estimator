@@ -216,6 +216,8 @@ def override_config_with_args(config, args):
         config['training']['epochs'] = args.epochs
     if hasattr(args, 'learning_rate') and args.learning_rate is not None:
         config['training']['learning_rate'] = args.learning_rate
+    if hasattr(args, 'early_stopping') and args.early_stopping is not None:
+        config['training']['early_stopping'] = args.early_stopping
     if hasattr(args, 'batch_size') and args.batch_size is not None:
         config['data']['batch_size'] = args.batch_size
     
