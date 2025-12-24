@@ -382,7 +382,7 @@ class OmegaTrainer:
                 self.epochs_without_improvement = 0
                 
                 best_path = os.path.join(
-                    self.exp_dir, f'checkpoint best model.{self.save_format}'
+                    self.exp_dir, f'checkpoint_best_model.{self.save_format}'
                 )
                 save_checkpoint(
                     self.model,
@@ -419,7 +419,7 @@ class OmegaTrainer:
             
             # Save latest checkpoint after each epoch
             latest_path = os.path.join(
-                self.exp_dir, f'checkpoint latest.{self.save_format}'
+                self.exp_dir, f'checkpoint_latest.{self.save_format}'
             )
             save_checkpoint(
                 self.model,
