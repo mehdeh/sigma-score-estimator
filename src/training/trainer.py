@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 from ..datasets import NoiseGenerator
 from ..utils import (
@@ -21,6 +20,12 @@ from ..utils import (
 )
 from .loss_functions import LossFactory
 from .output_transforms import TransformFactory
+from .evaluation_utils import (
+    compute_omega_hat_target,
+    compute_raw_target,
+    compute_evaluation_metrics,
+    log_evaluation_metrics,
+)
 
 
 class OmegaTrainer:
@@ -449,87 +454,6 @@ class OmegaTrainer:
             'best_val_loss': best_val_loss,
         }
     
-    def _compute_omega_hat_target(self, clean_images, noisy_images, sigma):
-        """
-        Compute ground truth omega_hat for evaluation.
-        
-        Computes: ω̂_target = ||x - x̃||² / σ³
-        
-        This is mathematically equivalent to: ||ε||² / σ
-        where ε = (x̃ - x) / σ
-        
-        Args:
-            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
-            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
-            sigma (Tensor): Noise levels, shape (batch_size,)
-        
-        Returns:
-            Tensor: Ground truth omega_hat = ||x - x̃||² / σ³
-        """
-        batch_size = clean_images.size(0)
-        
-        # Flatten images
-        clean_flat = clean_images.view(batch_size, -1)
-        noisy_flat = noisy_images.view(batch_size, -1)
-        
-        # Ensure sigma is 1D
-        if sigma.dim() > 1:
-            sigma = sigma.squeeze()
-        
-        # Compute epsilon = (x_tilde - x) / sigma
-        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
-        
-        # Compute ||epsilon||²
-        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
-        
-        # Ground truth omega_hat = ||epsilon||² / sigma
-        # This equals ||x - x̃||² / σ³
-        omega_hat_target = epsilon_norm_sq / sigma
-        
-        return omega_hat_target
-    
-    def _compute_raw_target(self, clean_images, noisy_images, sigma):
-        """
-        Compute ground truth in the same space as raw model output (before transformation).
-        
-        For omega_chi_zscore: Computes z-score = (||ε||² - d) / sqrt(2*d)
-        For other losses: Same as omega_hat target (no transformation)
-        
-        Args:
-            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
-            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
-            sigma (Tensor): Noise levels, shape (batch_size,)
-        
-        Returns:
-            Tensor: Ground truth in raw output space
-        """
-        batch_size = clean_images.size(0)
-        
-        # Flatten images
-        clean_flat = clean_images.view(batch_size, -1)
-        noisy_flat = noisy_images.view(batch_size, -1)
-        d = clean_flat.size(1)  # Image dimensionality
-        
-        # Ensure sigma is 1D
-        if sigma.dim() > 1:
-            sigma = sigma.squeeze()
-        
-        # Compute epsilon = (x_tilde - x) / sigma
-        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
-        
-        # Compute ||epsilon||²
-        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
-        
-        # For omega_chi_zscore, compute z-score
-        if self.loss_type == 'omega_chi_zscore':
-            # z-score = (||epsilon||² - d) / sqrt(2*d)
-            sqrt_2d = torch.sqrt(torch.tensor(2.0 * d, device=epsilon_norm_sq.device))
-            raw_target = (epsilon_norm_sq - d) / sqrt_2d
-        else:
-            # For other losses, raw output is already omega_hat
-            raw_target = epsilon_norm_sq / sigma
-        
-        return raw_target
     
     def _evaluate_dataset(self, data_loader, max_batches=None):
         """
@@ -577,10 +501,10 @@ class OmegaTrainer:
                 omega_hat = self.output_transform.apply(output, sigma=sigma)
                 
                 # Compute target omega_hat using the correct formula
-                target = self._compute_omega_hat_target(images, noisy_images, sigma)
+                target = compute_omega_hat_target(images, noisy_images, sigma)
                 
                 # Compute raw target (in same space as raw model output)
-                raw_target = self._compute_raw_target(images, noisy_images, sigma)
+                raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
                 
                 # Compute loss
                 loss = self.loss_fn(output, images, noisy_images, sigma)
@@ -602,39 +526,6 @@ class OmegaTrainer:
         
         return predictions, targets, sigmas, raw_predictions, raw_targets, losses
     
-    def _compute_metrics(self, predictions, targets, losses):
-        """
-        Compute evaluation metrics from predictions and targets.
-        
-        Args:
-            predictions (np.ndarray): Model predictions
-            targets (np.ndarray): Ground truth targets
-            losses (np.ndarray): Loss values for each sample
-        
-        Returns:
-            dict: Dictionary containing evaluation metrics
-        """
-        mse = mean_squared_error(targets, predictions)
-        mae = mean_absolute_error(targets, predictions)
-        r2 = r2_score(targets, predictions)
-        avg_loss = np.mean(losses)
-        
-        # Compute relative error metrics
-        relative_errors = np.abs(predictions - targets) / (np.abs(targets) + 1e-8)
-        mean_relative_error = np.mean(relative_errors)
-        median_relative_error = np.median(relative_errors)
-        
-        metrics = {
-            'mse': float(mse),
-            'mae': float(mae),
-            'r2_score': float(r2),
-            'avg_loss': float(avg_loss),
-            'mean_relative_error': float(mean_relative_error),
-            'median_relative_error': float(median_relative_error),
-            'num_samples': len(predictions),
-        }
-        
-        return metrics
     
     def _save_metrics(self, metrics, filename):
         """
@@ -668,17 +559,10 @@ class OmegaTrainer:
             )
             
             # Compute training metrics
-            train_metrics = self._compute_metrics(train_predictions, train_targets, train_losses)
+            train_metrics = compute_evaluation_metrics(train_predictions, train_targets, train_losses)
             
             # Log training metrics
-            self.logger.info("Training Evaluation Results:")
-            self.logger.info(f"  Number of samples: {train_metrics['num_samples']}")
-            self.logger.info(f"  MSE: {train_metrics['mse']:.6f}")
-            self.logger.info(f"  MAE: {train_metrics['mae']:.6f}")
-            self.logger.info(f"  R² Score: {train_metrics['r2_score']:.6f}")
-            self.logger.info(f"  Average Loss: {train_metrics['avg_loss']:.6f}")
-            self.logger.info(f"  Mean Relative Error: {train_metrics['mean_relative_error']:.4f}")
-            self.logger.info(f"  Median Relative Error: {train_metrics['median_relative_error']:.4f}")
+            log_evaluation_metrics(self.logger, train_metrics, phase='Training Evaluation')
             
             # Save training metrics
             self._save_metrics(train_metrics, 'train_metrics.json')
@@ -717,17 +601,10 @@ class OmegaTrainer:
             )
             
             # Compute validation metrics
-            val_metrics = self._compute_metrics(val_predictions, val_targets, val_losses)
+            val_metrics = compute_evaluation_metrics(val_predictions, val_targets, val_losses)
             
             # Log validation metrics
-            self.logger.info("Validation Evaluation Results:")
-            self.logger.info(f"  Number of samples: {val_metrics['num_samples']}")
-            self.logger.info(f"  MSE: {val_metrics['mse']:.6f}")
-            self.logger.info(f"  MAE: {val_metrics['mae']:.6f}")
-            self.logger.info(f"  R² Score: {val_metrics['r2_score']:.6f}")
-            self.logger.info(f"  Average Loss: {val_metrics['avg_loss']:.6f}")
-            self.logger.info(f"  Mean Relative Error: {val_metrics['mean_relative_error']:.4f}")
-            self.logger.info(f"  Median Relative Error: {val_metrics['median_relative_error']:.4f}")
+            log_evaluation_metrics(self.logger, val_metrics, phase='Validation Evaluation')
             
             # Save validation metrics
             self._save_metrics(val_metrics, 'val_metrics.json')
