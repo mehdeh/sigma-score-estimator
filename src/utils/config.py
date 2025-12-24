@@ -182,7 +182,6 @@ def create_default_config():
         'checkpoint': {
             'save_format': 'pkl',
             'save_best': True,
-            'save_every': 10,
         },
         'logging': {
             'log_interval': 100,

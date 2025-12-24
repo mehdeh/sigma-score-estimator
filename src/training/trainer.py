@@ -63,7 +63,6 @@ class OmegaTrainer:
         self.patience = config['training'].get('patience', 10)
         self.log_interval = config['logging'].get('log_interval', 100)
         self.save_format = config['checkpoint'].get('save_format', 'pkl')
-        self.save_every = config['checkpoint'].get('save_every', 10)
         
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
@@ -376,21 +375,6 @@ class OmegaTrainer:
             # Log metrics
             self.metrics_logger.log_epoch(epoch + 1, train_loss, val_loss, current_lr)
             
-            # Save checkpoint periodically
-            if (epoch + 1) % self.save_every == 0:
-                checkpoint_path = os.path.join(
-                    self.exp_dir, f'checkpoint_epoch_{epoch+1}.{self.save_format}'
-                )
-                save_checkpoint(
-                    self.model,
-                    self.optimizer,
-                    epoch,
-                    self.train_losses,
-                    self.val_losses,
-                    checkpoint_path,
-                    save_format=self.save_format
-                )
-            
             # Save best model
             is_best = val_loss < self.best_val_loss
             if is_best:
@@ -398,7 +382,7 @@ class OmegaTrainer:
                 self.epochs_without_improvement = 0
                 
                 best_path = os.path.join(
-                    self.exp_dir, f'best_model.{self.save_format}'
+                    self.exp_dir, f'checkpoint best model.{self.save_format}'
                 )
                 save_checkpoint(
                     self.model,
@@ -432,20 +416,20 @@ class OmegaTrainer:
                 save_path=plot_path,
                 show=False
             )
-        
-        # Save final checkpoint
-        final_path = os.path.join(
-            self.exp_dir, f'latest.{self.save_format}'
-        )
-        save_checkpoint(
-            self.model,
-            self.optimizer,
-            epoch,
-            self.train_losses,
-            self.val_losses,
-            final_path,
-            save_format=self.save_format
-        )
+            
+            # Save latest checkpoint after each epoch
+            latest_path = os.path.join(
+                self.exp_dir, f'checkpoint latest.{self.save_format}'
+            )
+            save_checkpoint(
+                self.model,
+                self.optimizer,
+                epoch,
+                self.train_losses,
+                self.val_losses,
+                latest_path,
+                save_format=self.save_format
+            )
         
         self.logger.info("Training completed!")
         best_epoch, best_val_loss = self.metrics_logger.get_best_epoch()
