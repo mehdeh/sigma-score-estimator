@@ -14,7 +14,7 @@ noise:
 
 # Training configuration
 training:
-  loss_type: "omega_hat"  # Options: "omega_hat", "omega_epsilon", "omega_chi_zscore"
+  loss_type: "omega_chi_zscore"  # Options: "omega_hat", "omega_epsilon", "omega_chi_zscore"
   epochs: 100
   
   # Optimizer configuration (both Adam and SGD tested and work well)
