@@ -3,10 +3,10 @@ Evaluator class for evaluating trained omega estimator models.
 """
 
 import os
+import json
 import torch
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 from ..datasets import NoiseGenerator
 from ..utils import (
@@ -18,6 +18,12 @@ from ..utils import (
 )
 from .loss_functions import LossFactory
 from .output_transforms import TransformFactory
+from .evaluation_utils import (
+    compute_omega_hat_target,
+    compute_raw_target,
+    compute_evaluation_metrics,
+    log_evaluation_metrics,
+)
 
 
 class OmegaEvaluator:
@@ -51,6 +57,7 @@ class OmegaEvaluator:
         
         # Extract config parameters
         self.model_type = config['model']['type']
+        self.loss_type = config['training']['loss_type']
         
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
@@ -64,14 +71,14 @@ class OmegaEvaluator:
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
         self.loss_fn = LossFactory.get_loss(
-            config['training']['loss_type'],
+            self.loss_type,
             image_dim=image_dim
         )
         self.image_dim = image_dim
         
         # Initialize output transform
         self.output_transform = TransformFactory.get_transform(
-            loss_type=config['training']['loss_type'],
+            loss_type=self.loss_type,
             image_dim=image_dim
         )
         
@@ -107,6 +114,8 @@ class OmegaEvaluator:
         all_targets = []
         all_sigmas = []
         all_losses = []
+        all_raw_predictions = []
+        all_raw_targets = []
         
         # For visualization
         sample_clean_images = []
@@ -137,13 +146,19 @@ class OmegaEvaluator:
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
                 
+                # Store raw output (before transformation)
+                all_raw_predictions.append(output.squeeze().cpu())
+                
                 # Apply output transformation to get omega_hat
                 # This converts model output to omega_hat for evaluation
                 omega_hat = self.output_transform.apply(output, sigma=sigma)
                 
                 # Compute target (ground truth omega_hat)
                 # All evaluation is done in omega_hat space
-                target = self._compute_omega_hat_target(images, noisy_images, sigma)
+                target = compute_omega_hat_target(images, noisy_images, sigma)
+                
+                # Compute raw target (in same space as raw model output)
+                raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
                 
                 # Compute loss (for logging purposes)
                 loss = self.loss_fn(output, images, noisy_images, sigma)
@@ -153,6 +168,7 @@ class OmegaEvaluator:
                 all_targets.append(target.cpu())
                 all_sigmas.append(sigma.cpu())
                 all_losses.append(loss.item())
+                all_raw_targets.append(raw_target.cpu())
                 
                 # Store samples for visualization
                 if len(sample_clean_images) < max_vis_samples:
@@ -170,40 +186,16 @@ class OmegaEvaluator:
         all_predictions = torch.cat(all_predictions).numpy()
         all_targets = torch.cat(all_targets).numpy()
         all_sigmas = torch.cat(all_sigmas).numpy()
+        all_raw_predictions = torch.cat(all_raw_predictions).numpy()
+        all_raw_targets = torch.cat(all_raw_targets).numpy()
         
         # Compute metrics
-        mse = mean_squared_error(all_targets, all_predictions)
-        mae = mean_absolute_error(all_targets, all_predictions)
-        r2 = r2_score(all_targets, all_predictions)
-        avg_loss = np.mean(all_losses)
-        
-        # Compute relative error metrics
-        relative_errors = np.abs(all_predictions - all_targets) / (np.abs(all_targets) + 1e-8)
-        mean_relative_error = np.mean(relative_errors)
-        median_relative_error = np.median(relative_errors)
-        
-        metrics = {
-            'mse': float(mse),
-            'mae': float(mae),
-            'r2_score': float(r2),
-            'avg_loss': float(avg_loss),
-            'mean_relative_error': float(mean_relative_error),
-            'median_relative_error': float(median_relative_error),
-            'num_samples': samples_evaluated,
-        }
+        metrics = compute_evaluation_metrics(all_predictions, all_targets, all_losses)
         
         # Log metrics
-        self.logger.info("Evaluation Results:")
-        self.logger.info(f"  Number of samples: {samples_evaluated}")
-        self.logger.info(f"  MSE: {mse:.6f}")
-        self.logger.info(f"  MAE: {mae:.6f}")
-        self.logger.info(f"  R² Score: {r2:.6f}")
-        self.logger.info(f"  Average Loss: {avg_loss:.6f}")
-        self.logger.info(f"  Mean Relative Error: {mean_relative_error:.4f}")
-        self.logger.info(f"  Median Relative Error: {median_relative_error:.4f}")
+        log_evaluation_metrics(self.logger, metrics, phase='Test Evaluation')
         
         # Save metrics to JSON
-        import json
         metrics_file = os.path.join(self.exp_dir, 'test_metrics.json')
         with open(metrics_file, 'w') as f:
             json.dump(metrics, f, indent=2)
@@ -214,14 +206,17 @@ class OmegaEvaluator:
             self.logger.info("Generating visualizations...")
             plots_dir = self.exp_dir
             
-            # Scatter plot of predictions vs targets
+            # Scatter plot of predictions vs targets (showing both before and after transformation)
             scatter_path = os.path.join(plots_dir, 'test_scatter_predictions.png')
             plot_predictions_scatter(
                 all_predictions,
                 all_targets,
                 save_path=scatter_path,
                 show=False,
-                title='Test: Model Predictions vs Ground Truth ω̂'
+                title='Test: Model Predictions vs Ground Truth ω̂',
+                raw_predictions=all_raw_predictions,
+                raw_targets=all_raw_targets,
+                loss_type=self.loss_type
             )
             
             # Error vs sigma plot
@@ -265,47 +260,6 @@ class OmegaEvaluator:
         
         return metrics
     
-    def _compute_omega_hat_target(self, clean_images, noisy_images, sigma):
-        """
-        Compute ground truth omega_hat for evaluation.
-        
-        Computes: ω̂_target = ||x - x̃||² / σ³
-        
-        This is mathematically equivalent to: ||ε||² / σ
-        where ε = (x̃ - x) / σ
-        
-        All evaluation metrics are computed in omega_hat space after transformation.
-        This provides a consistent evaluation metric across all loss types.
-        
-        Args:
-            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
-            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
-            sigma (Tensor): Noise levels, shape (batch_size,)
-        
-        Returns:
-            Tensor: Ground truth omega_hat = ||x - x̃||² / σ³
-        """
-        batch_size = clean_images.size(0)
-        
-        # Flatten images
-        clean_flat = clean_images.view(batch_size, -1)
-        noisy_flat = noisy_images.view(batch_size, -1)
-        
-        # Ensure sigma is 1D
-        if sigma.dim() > 1:
-            sigma = sigma.squeeze()
-        
-        # Compute epsilon = (x_tilde - x) / sigma
-        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
-        
-        # Compute ||epsilon||²
-        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
-        
-        # Ground truth omega_hat = ||epsilon||² / sigma
-        # This equals ||x - x̃||² / σ³
-        omega_hat_target = epsilon_norm_sq / sigma
-        
-        return omega_hat_target
     
     def predict_batch(self, images, sigma):
         """

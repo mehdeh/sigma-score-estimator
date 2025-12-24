@@ -47,7 +47,6 @@ omega_hat_config:
   checkpoint:
     save_format: "pkl"
     save_best: true
-    save_every: 10
   
   logging:
     log_interval: 100
@@ -95,7 +94,6 @@ omega_epsilon_config:
   checkpoint:
     save_format: "pkl"
     save_best: true
-    save_every: 10
   
   logging:
     log_interval: 100
@@ -144,7 +142,6 @@ omega_chi_zscore_config:
   checkpoint:
     save_format: "pkl"
     save_best: true
-    save_every: 10
   
   logging:
     log_interval: 100

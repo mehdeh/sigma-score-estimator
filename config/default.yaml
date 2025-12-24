@@ -54,7 +54,6 @@ data:
 checkpoint:
   save_format: "pkl"  # Options: "pkl", "pth"
   save_best: true  # Save best model based on validation loss
-  save_every: 10  # Save checkpoint every N epochs
 
 # Logging configuration
 logging:

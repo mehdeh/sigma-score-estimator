@@ -12,6 +12,12 @@ from .output_transforms import (
     ChiZScoreTransform,
     TransformFactory,
 )
+from .evaluation_utils import (
+    compute_omega_hat_target,
+    compute_raw_target,
+    compute_evaluation_metrics,
+    log_evaluation_metrics,
+)
 
 __all__ = [
     'OmegaTrainer',
@@ -22,5 +28,9 @@ __all__ = [
     'IdentityTransform',
     'ChiZScoreTransform',
     'TransformFactory',
+    'compute_omega_hat_target',
+    'compute_raw_target',
+    'compute_evaluation_metrics',
+    'log_evaluation_metrics',
 ]
 
