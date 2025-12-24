@@ -3,9 +3,12 @@ Trainer class for training the omega estimator models.
 """
 
 import os
+import json
 import torch
 import torch.nn as nn
+import numpy as np
 from tqdm import tqdm
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 from ..datasets import NoiseGenerator
 from ..utils import (
@@ -435,9 +438,9 @@ class OmegaTrainer:
         best_epoch, best_val_loss = self.metrics_logger.get_best_epoch()
         self.logger.info(f"Best validation loss: {best_val_loss:.6f} at epoch {best_epoch}")
         
-        # Generate scatter plots for final training evaluation
-        self.logger.info("Generating training evaluation plots...")
-        self._generate_evaluation_plots()
+        # Generate scatter plots and compute metrics for final training evaluation
+        self.logger.info("Generating training evaluation plots and computing metrics...")
+        self._generate_evaluation_plots_and_metrics()
         
         return {
             'train_losses': self.train_losses,
@@ -537,7 +540,7 @@ class OmegaTrainer:
             max_batches (int, optional): Maximum number of batches to evaluate
         
         Returns:
-            tuple: (predictions, targets, sigmas, raw_predictions, raw_targets) as numpy arrays
+            tuple: (predictions, targets, sigmas, raw_predictions, raw_targets, losses) as numpy arrays
         """
         self.model.eval()
         
@@ -546,6 +549,7 @@ class OmegaTrainer:
         all_sigmas = []
         all_raw_predictions = []
         all_raw_targets = []
+        all_losses = []
         
         with torch.no_grad():
             for batch_idx, (images, _) in enumerate(data_loader):
@@ -578,11 +582,15 @@ class OmegaTrainer:
                 # Compute raw target (in same space as raw model output)
                 raw_target = self._compute_raw_target(images, noisy_images, sigma)
                 
+                # Compute loss
+                loss = self.loss_fn(output, images, noisy_images, sigma)
+                
                 # Store results
                 all_predictions.append(omega_hat.squeeze().cpu())
                 all_targets.append(target.cpu())
                 all_sigmas.append(sigma.cpu())
                 all_raw_targets.append(raw_target.cpu())
+                all_losses.append(loss.item())
         
         # Concatenate and convert to numpy
         predictions = torch.cat(all_predictions).numpy()
@@ -590,26 +598,90 @@ class OmegaTrainer:
         sigmas = torch.cat(all_sigmas).numpy()
         raw_predictions = torch.cat(all_raw_predictions).numpy()
         raw_targets = torch.cat(all_raw_targets).numpy()
+        losses = np.array(all_losses)
         
-        return predictions, targets, sigmas, raw_predictions, raw_targets
+        return predictions, targets, sigmas, raw_predictions, raw_targets, losses
     
-    def _generate_evaluation_plots(self):
+    def _compute_metrics(self, predictions, targets, losses):
         """
-        Generate evaluation plots for training and validation data.
+        Compute evaluation metrics from predictions and targets.
+        
+        Args:
+            predictions (np.ndarray): Model predictions
+            targets (np.ndarray): Ground truth targets
+            losses (np.ndarray): Loss values for each sample
+        
+        Returns:
+            dict: Dictionary containing evaluation metrics
+        """
+        mse = mean_squared_error(targets, predictions)
+        mae = mean_absolute_error(targets, predictions)
+        r2 = r2_score(targets, predictions)
+        avg_loss = np.mean(losses)
+        
+        # Compute relative error metrics
+        relative_errors = np.abs(predictions - targets) / (np.abs(targets) + 1e-8)
+        mean_relative_error = np.mean(relative_errors)
+        median_relative_error = np.median(relative_errors)
+        
+        metrics = {
+            'mse': float(mse),
+            'mae': float(mae),
+            'r2_score': float(r2),
+            'avg_loss': float(avg_loss),
+            'mean_relative_error': float(mean_relative_error),
+            'median_relative_error': float(median_relative_error),
+            'num_samples': len(predictions),
+        }
+        
+        return metrics
+    
+    def _save_metrics(self, metrics, filename):
+        """
+        Save metrics to JSON file.
+        
+        Args:
+            metrics (dict): Dictionary of metrics to save
+            filename (str): Name of the metrics file (e.g., 'train_metrics.json')
+        """
+        metrics_file = os.path.join(self.exp_dir, filename)
+        with open(metrics_file, 'w') as f:
+            json.dump(metrics, f, indent=2)
+        self.logger.info(f"Metrics saved to {metrics_file}")
+    
+    def _generate_evaluation_plots_and_metrics(self):
+        """
+        Generate evaluation plots and compute metrics for training and validation data.
         
         Creates multiple plots:
         1. Scatter plots showing model predictions vs ground truth omega_hat
         2. Error vs sigma plots showing how prediction error varies with noise level
         
-        This helps analyze model performance across different noise levels.
+        Also computes and saves metrics to JSON files similar to test evaluation.
         """
         try:
             # Evaluate on training data (use subset to save time)
             self.logger.info("Evaluating on training data...")
-            train_predictions, train_targets, train_sigmas, train_raw_predictions, train_raw_targets = self._evaluate_dataset(
+            train_predictions, train_targets, train_sigmas, train_raw_predictions, train_raw_targets, train_losses = self._evaluate_dataset(
                 self.train_loader, 
                 max_batches=50  # Evaluate on first 50 batches
             )
+            
+            # Compute training metrics
+            train_metrics = self._compute_metrics(train_predictions, train_targets, train_losses)
+            
+            # Log training metrics
+            self.logger.info("Training Evaluation Results:")
+            self.logger.info(f"  Number of samples: {train_metrics['num_samples']}")
+            self.logger.info(f"  MSE: {train_metrics['mse']:.6f}")
+            self.logger.info(f"  MAE: {train_metrics['mae']:.6f}")
+            self.logger.info(f"  R² Score: {train_metrics['r2_score']:.6f}")
+            self.logger.info(f"  Average Loss: {train_metrics['avg_loss']:.6f}")
+            self.logger.info(f"  Mean Relative Error: {train_metrics['mean_relative_error']:.4f}")
+            self.logger.info(f"  Median Relative Error: {train_metrics['median_relative_error']:.4f}")
+            
+            # Save training metrics
+            self._save_metrics(train_metrics, 'train_metrics.json')
             
             # Generate training scatter plot (showing both before and after transformation)
             train_scatter_path = os.path.join(self.exp_dir, 'train_scatter_predictions.png')
@@ -639,10 +711,26 @@ class OmegaTrainer:
             
             # Evaluate on validation data
             self.logger.info("Evaluating on validation data...")
-            val_predictions, val_targets, val_sigmas, val_raw_predictions, val_raw_targets = self._evaluate_dataset(
+            val_predictions, val_targets, val_sigmas, val_raw_predictions, val_raw_targets, val_losses = self._evaluate_dataset(
                 self.val_loader,
                 max_batches=None  # Evaluate on full validation set
             )
+            
+            # Compute validation metrics
+            val_metrics = self._compute_metrics(val_predictions, val_targets, val_losses)
+            
+            # Log validation metrics
+            self.logger.info("Validation Evaluation Results:")
+            self.logger.info(f"  Number of samples: {val_metrics['num_samples']}")
+            self.logger.info(f"  MSE: {val_metrics['mse']:.6f}")
+            self.logger.info(f"  MAE: {val_metrics['mae']:.6f}")
+            self.logger.info(f"  R² Score: {val_metrics['r2_score']:.6f}")
+            self.logger.info(f"  Average Loss: {val_metrics['avg_loss']:.6f}")
+            self.logger.info(f"  Mean Relative Error: {val_metrics['mean_relative_error']:.4f}")
+            self.logger.info(f"  Median Relative Error: {val_metrics['median_relative_error']:.4f}")
+            
+            # Save validation metrics
+            self._save_metrics(val_metrics, 'val_metrics.json')
             
             # Generate validation scatter plot (showing both before and after transformation)
             val_scatter_path = os.path.join(self.exp_dir, 'val_scatter_predictions.png')
@@ -671,7 +759,7 @@ class OmegaTrainer:
             self.logger.info(f"Validation error vs sigma plot saved to {val_error_sigma_path}")
             
         except Exception as e:
-            self.logger.error(f"Error generating evaluation plots: {str(e)}")
+            self.logger.error(f"Error generating evaluation plots and metrics: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
 
