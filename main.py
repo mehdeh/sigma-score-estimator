@@ -15,7 +15,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.models import create_model
-from src.data import get_cifar10_dataloaders
+from src.datasets import get_cifar10_dataloaders
 from src.training import OmegaTrainer, OmegaEvaluator
 from src.utils import (
     load_config,

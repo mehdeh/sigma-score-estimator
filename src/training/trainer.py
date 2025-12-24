@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from ..data import NoiseGenerator
+from ..datasets import NoiseGenerator
 from ..utils import (
     save_checkpoint,
     setup_logger,

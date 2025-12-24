@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
-from ..data import NoiseGenerator
+from ..datasets import NoiseGenerator
 from ..utils import (
     setup_logger,
     plot_predictions_scatter,

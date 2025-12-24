@@ -230,7 +230,7 @@ class CustomLoss(nn.Module):
 
 ### Custom Noise Strategies
 
-Add new sampling strategies in `src/data/noise_generator.py`:
+Add new sampling strategies in `src/datasets/noise_generator.py`:
 
 ```python
 def _custom_sampling(self, batch_size):

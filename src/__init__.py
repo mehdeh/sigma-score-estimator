@@ -9,9 +9,9 @@ __version__ = '1.0.0'
 __author__ = 'Sigma-Score-Estimator Team'
 
 from . import models
-from . import data
+from . import datasets
 from . import training
 from . import utils
 
-__all__ = ['models', 'data', 'training', 'utils']
+__all__ = ['models', 'datasets', 'training', 'utils']
 

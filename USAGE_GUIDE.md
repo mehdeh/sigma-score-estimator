@@ -272,7 +272,7 @@ print(f"Prediction: {prediction.item()}")
 ```python
 import torch
 from torch.utils.data import DataLoader
-from src.data import get_cifar10_dataloaders
+from src.datasets import get_cifar10_dataloaders
 
 # Load data
 _, _, test_loader = get_cifar10_dataloaders(batch_size=64)
@@ -445,7 +445,7 @@ def get_loss(loss_type='omega_hat', image_dim=3072):
 
 ### Custom Noise Strategy
 
-Add a custom strategy in `src/data/noise_generator.py`:
+Add a custom strategy in `src/datasets/noise_generator.py`:
 
 ```python
 def _custom_sampling(self, batch_size):
@@ -571,7 +571,7 @@ Modify `src/utils/logger.py` to set level to `logging.DEBUG`
 #### Visualize Training Data
 
 ```python
-from src.data import get_cifar10_dataloaders
+from src.datasets import get_cifar10_dataloaders
 from src.utils import visualize_sample_images
 
 train_loader, _, _ = get_cifar10_dataloaders()
