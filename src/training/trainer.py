@@ -78,19 +78,16 @@ class OmegaTrainer:
         
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
-        sigma_cal = config['training'].get('sigma_cal', 0.0)
         self.loss_fn = LossFactory.get_loss(
             config['training']['loss_type'],
-            image_dim=image_dim,
-            sigma_cal=sigma_cal
+            image_dim=image_dim
         )
         self.image_dim = image_dim
         
         # Initialize output transform for evaluation
         self.output_transform = TransformFactory.get_transform(
             loss_type=config['training']['loss_type'],
-            image_dim=image_dim,
-            sigma_cal=sigma_cal
+            image_dim=image_dim
         )
         
         # Initialize optimizer

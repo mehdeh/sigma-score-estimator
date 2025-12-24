@@ -9,8 +9,6 @@ from .loss_functions import LossFactory, get_available_losses
 from .output_transforms import (
     OutputTransform,
     IdentityTransform,
-    SigmaToOmegaTransform,
-    SigmaCalibratedTransform,
     ChiZScoreTransform,
     TransformFactory,
 )
@@ -22,8 +20,6 @@ __all__ = [
     'get_available_losses',
     'OutputTransform',
     'IdentityTransform',
-    'SigmaToOmegaTransform',
-    'SigmaCalibratedTransform',
     'ChiZScoreTransform',
     'TransformFactory',
 ]
