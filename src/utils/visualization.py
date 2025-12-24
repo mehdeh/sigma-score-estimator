@@ -189,6 +189,128 @@ def plot_noise_distribution(sigma_values, save_path=None, show=False):
         plt.close()
 
 
+def plot_error_vs_sigma(predictions, targets, sigma_values, save_path=None, show=False,
+                        title='Prediction Error vs Sigma', num_bins=20):
+    """
+    Plot the relationship between prediction error and sigma values.
+    
+    Creates a visualization showing how prediction error varies with noise level (sigma).
+    This helps identify whether model performance degrades at certain noise levels.
+    
+    The plot includes:
+    - Scatter plot of absolute errors vs sigma
+    - Binned average errors with error bars (showing variation within each bin)
+    
+    Args:
+        predictions (array-like): Model predictions (ω̂)
+        targets (array-like): Ground truth targets (ω̂_target)
+        sigma_values (array-like): Noise level values
+        save_path (str, optional): Path to save the plot
+        show (bool): Whether to display the plot
+        title (str): Plot title
+        num_bins (int): Number of bins for aggregating errors by sigma range
+    """
+    # Convert to numpy if needed
+    if isinstance(predictions, torch.Tensor):
+        predictions = predictions.detach().cpu().numpy()
+    if isinstance(targets, torch.Tensor):
+        targets = targets.detach().cpu().numpy()
+    if isinstance(sigma_values, torch.Tensor):
+        sigma_values = sigma_values.detach().cpu().numpy()
+    
+    # Flatten arrays
+    predictions = predictions.flatten()
+    targets = targets.flatten()
+    sigma_values = sigma_values.flatten()
+    
+    # Compute absolute errors
+    absolute_errors = np.abs(predictions - targets)
+    
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Left subplot: Scatter plot of errors vs sigma
+    ax1.scatter(sigma_values, absolute_errors, alpha=0.3, s=10, c='steelblue')
+    ax1.set_xlabel('Sigma (Noise Level)', fontsize=12)
+    ax1.set_ylabel('Absolute Error |Predicted ω̂ - Target ω̂|', fontsize=12)
+    ax1.set_title(f'{title} - Scatter Plot', fontsize=14)
+    ax1.grid(True, alpha=0.3)
+    
+    # Add correlation info
+    from scipy.stats import pearsonr, spearmanr
+    try:
+        pearson_corr, pearson_p = pearsonr(sigma_values, absolute_errors)
+        spearman_corr, spearman_p = spearmanr(sigma_values, absolute_errors)
+        corr_text = f'Pearson r = {pearson_corr:.3f} (p={pearson_p:.4f})\n'
+        corr_text += f'Spearman ρ = {spearman_corr:.3f} (p={spearman_p:.4f})'
+        ax1.text(0.05, 0.95, corr_text, transform=ax1.transAxes,
+                fontsize=10, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7))
+    except Exception as e:
+        print(f"Warning: Could not compute correlation: {e}")
+    
+    # Right subplot: Binned average errors with error bars
+    sigma_min, sigma_max = sigma_values.min(), sigma_values.max()
+    bin_edges = np.linspace(sigma_min, sigma_max, num_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    bin_means = []
+    bin_stds = []
+    bin_counts = []
+    
+    for i in range(num_bins):
+        mask = (sigma_values >= bin_edges[i]) & (sigma_values < bin_edges[i + 1])
+        if i == num_bins - 1:  # Include the last edge in the last bin
+            mask = (sigma_values >= bin_edges[i]) & (sigma_values <= bin_edges[i + 1])
+        
+        errors_in_bin = absolute_errors[mask]
+        
+        if len(errors_in_bin) > 0:
+            bin_means.append(np.mean(errors_in_bin))
+            bin_stds.append(np.std(errors_in_bin))
+            bin_counts.append(len(errors_in_bin))
+        else:
+            bin_means.append(0)
+            bin_stds.append(0)
+            bin_counts.append(0)
+    
+    bin_means = np.array(bin_means)
+    bin_stds = np.array(bin_stds)
+    bin_counts = np.array(bin_counts)
+    
+    # Plot binned errors with error bars
+    ax2.errorbar(bin_centers, bin_means, yerr=bin_stds, fmt='o-', 
+                linewidth=2, markersize=6, capsize=5, capthick=2,
+                color='darkred', ecolor='coral', label='Mean ± Std')
+    
+    ax2.set_xlabel('Sigma (Noise Level)', fontsize=12)
+    ax2.set_ylabel('Mean Absolute Error', fontsize=12)
+    ax2.set_title(f'{title} - Binned Statistics', fontsize=14)
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=10)
+    
+    # Add sample count info
+    stats_text = f'Total samples: {len(sigma_values)}\n'
+    stats_text += f'Bins: {num_bins}\n'
+    stats_text += f'Mean error: {np.mean(absolute_errors):.4f}\n'
+    stats_text += f'Std error: {np.std(absolute_errors):.4f}'
+    ax2.text(0.95, 0.95, stats_text, transform=ax2.transAxes,
+            fontsize=10, verticalalignment='top', horizontalalignment='right',
+            bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Error vs sigma plot saved to {save_path}")
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
 def visualize_sample_images(clean_images, noisy_images, sigma_values, n_samples=5, 
                             save_path=None, show=False):
     """

@@ -174,14 +174,26 @@ Training progress is automatically saved to the experiments directory (flat file
 
 ```
 experiments/train/exp_YYYYMMDD_HHMMSS/
-├── config.yaml              # Configuration used
-├── best_model.pkl           # Best model (lowest val loss)
-├── latest.pkl               # Latest checkpoint
-├── checkpoint_epoch_*.pkl   # Periodic checkpoints
-├── train.log                # Training logs
-├── metrics.json             # Training metrics
-└── loss_curve.png           # Loss curves
+├── config.yaml                     # Configuration used
+├── best_model.pkl                  # Best model (lowest val loss)
+├── latest.pkl                      # Latest checkpoint
+├── checkpoint_epoch_*.pkl          # Periodic checkpoints
+├── train.log                       # Training logs
+├── metrics.json                    # Training metrics
+├── loss_curve.png                  # Loss curves
+├── train_scatter_predictions.png   # Training predictions vs targets
+├── train_error_vs_sigma.png        # Training error vs noise level
+├── val_scatter_predictions.png     # Validation predictions vs targets
+└── val_error_vs_sigma.png          # Validation error vs noise level
 ```
+
+### Visualizations
+
+The framework generates several visualizations to help analyze model performance:
+
+1. **Loss Curves**: Training and validation loss over epochs
+2. **Scatter Plots**: Model predictions vs ground truth for both training and validation data
+3. **Error vs Sigma Plots**: Analysis of how prediction error varies with noise level, helping identify if the model performs differently at various noise levels
 
 ## 🔍 Using Trained Models
 

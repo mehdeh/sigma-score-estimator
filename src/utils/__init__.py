@@ -22,6 +22,7 @@ from .visualization import (
     plot_loss_curves,
     plot_predictions_scatter,
     plot_noise_distribution,
+    plot_error_vs_sigma,
     visualize_sample_images,
 )
 
@@ -42,6 +43,7 @@ __all__ = [
     'plot_loss_curves',
     'plot_predictions_scatter',
     'plot_noise_distribution',
+    'plot_error_vs_sigma',
     'visualize_sample_images',
 ]
 

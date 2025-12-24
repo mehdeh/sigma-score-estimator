@@ -14,6 +14,7 @@ from ..utils import (
     MetricsLogger,
     plot_loss_curves,
     plot_predictions_scatter,
+    plot_error_vs_sigma,
 )
 from .loss_functions import LossFactory
 from .output_transforms import TransformFactory
@@ -508,12 +509,13 @@ class OmegaTrainer:
             max_batches (int, optional): Maximum number of batches to evaluate
         
         Returns:
-            tuple: (predictions, targets) as numpy arrays
+            tuple: (predictions, targets, sigmas) as numpy arrays
         """
         self.model.eval()
         
         all_predictions = []
         all_targets = []
+        all_sigmas = []
         
         with torch.no_grad():
             for batch_idx, (images, _) in enumerate(data_loader):
@@ -543,24 +545,29 @@ class OmegaTrainer:
                 # Store results
                 all_predictions.append(omega_hat.squeeze().cpu())
                 all_targets.append(target.cpu())
+                all_sigmas.append(sigma.cpu())
         
         # Concatenate and convert to numpy
         predictions = torch.cat(all_predictions).numpy()
         targets = torch.cat(all_targets).numpy()
+        sigmas = torch.cat(all_sigmas).numpy()
         
-        return predictions, targets
+        return predictions, targets, sigmas
     
     def _generate_evaluation_plots(self):
         """
-        Generate scatter plots for training and validation data.
+        Generate evaluation plots for training and validation data.
         
-        Creates scatter plots showing model predictions vs ground truth omega_hat
-        for both training and validation datasets.
+        Creates multiple plots:
+        1. Scatter plots showing model predictions vs ground truth omega_hat
+        2. Error vs sigma plots showing how prediction error varies with noise level
+        
+        This helps analyze model performance across different noise levels.
         """
         try:
             # Evaluate on training data (use subset to save time)
             self.logger.info("Evaluating on training data...")
-            train_predictions, train_targets = self._evaluate_dataset(
+            train_predictions, train_targets, train_sigmas = self._evaluate_dataset(
                 self.train_loader, 
                 max_batches=50  # Evaluate on first 50 batches
             )
@@ -576,9 +583,21 @@ class OmegaTrainer:
             )
             self.logger.info(f"Training scatter plot saved to {train_scatter_path}")
             
+            # Generate training error vs sigma plot
+            train_error_sigma_path = os.path.join(self.exp_dir, 'train_error_vs_sigma.png')
+            plot_error_vs_sigma(
+                train_predictions,
+                train_targets,
+                train_sigmas,
+                save_path=train_error_sigma_path,
+                show=False,
+                title='Training: Prediction Error vs Sigma'
+            )
+            self.logger.info(f"Training error vs sigma plot saved to {train_error_sigma_path}")
+            
             # Evaluate on validation data
             self.logger.info("Evaluating on validation data...")
-            val_predictions, val_targets = self._evaluate_dataset(
+            val_predictions, val_targets, val_sigmas = self._evaluate_dataset(
                 self.val_loader,
                 max_batches=None  # Evaluate on full validation set
             )
@@ -593,6 +612,18 @@ class OmegaTrainer:
                 title='Validation: Model Predictions vs Ground Truth ω̂'
             )
             self.logger.info(f"Validation scatter plot saved to {val_scatter_path}")
+            
+            # Generate validation error vs sigma plot
+            val_error_sigma_path = os.path.join(self.exp_dir, 'val_error_vs_sigma.png')
+            plot_error_vs_sigma(
+                val_predictions,
+                val_targets,
+                val_sigmas,
+                save_path=val_error_sigma_path,
+                show=False,
+                title='Validation: Prediction Error vs Sigma'
+            )
+            self.logger.info(f"Validation error vs sigma plot saved to {val_error_sigma_path}")
             
         except Exception as e:
             self.logger.error(f"Error generating evaluation plots: {str(e)}")

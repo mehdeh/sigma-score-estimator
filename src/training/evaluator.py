@@ -13,6 +13,7 @@ from ..utils import (
     setup_logger,
     plot_predictions_scatter,
     plot_noise_distribution,
+    plot_error_vs_sigma,
     visualize_sample_images,
 )
 from .loss_functions import LossFactory
@@ -221,6 +222,17 @@ class OmegaEvaluator:
                 save_path=scatter_path,
                 show=False,
                 title='Test: Model Predictions vs Ground Truth ω̂'
+            )
+            
+            # Error vs sigma plot
+            error_sigma_path = os.path.join(plots_dir, 'test_error_vs_sigma.png')
+            plot_error_vs_sigma(
+                all_predictions,
+                all_targets,
+                all_sigmas,
+                save_path=error_sigma_path,
+                show=False,
+                title='Test: Prediction Error vs Sigma'
             )
             
             # Noise distribution plot

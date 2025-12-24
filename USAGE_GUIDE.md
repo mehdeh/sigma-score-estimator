@@ -179,6 +179,7 @@ experiments/test/exp_YYYYMMDD_HHMMSS/
 ├── test.log                 # Test logs
 ├── test_metrics.json        # Evaluation metrics
 ├── test_scatter_predictions.png    # Predictions vs targets (ω̂ scatter plot)
+├── test_error_vs_sigma.png         # Error vs noise level analysis
 ├── test_noise_distribution.png     # Noise level distribution
 └── test_sample_images.png          # Sample clean/noisy images
 ```
@@ -191,7 +192,9 @@ After training completes, the following additional plots are generated:
 experiments/train/exp_YYYYMMDD_HHMMSS/
 ├── ...
 ├── train_scatter_predictions.png   # Training data: ω̂ predictions vs targets
+├── train_error_vs_sigma.png        # Training data: Error vs noise level
 ├── val_scatter_predictions.png     # Validation data: ω̂ predictions vs targets
+├── val_error_vs_sigma.png          # Validation data: Error vs noise level
 └── loss_curve.png                  # Training/validation loss curves
 ```
 
@@ -220,6 +223,29 @@ The scatter plots visualize model performance by comparing:
 - Scatter around diagonal indicates variance in predictions
 
 The evaluation formula ω̂_target = ||x - x̃||² / σ³ is mathematically equivalent to ||ε||² / σ where ε = (x̃ - x) / σ. This provides a consistent evaluation metric across all loss types after applying appropriate output transformations.
+
+### Understanding Error vs Sigma Plots
+
+The error vs sigma plots help analyze the relationship between prediction error and noise level:
+
+**Left subplot (Scatter):**
+- **X-axis**: Sigma (noise level)
+- **Y-axis**: Absolute error |Predicted ω̂ - Target ω̂|
+- Shows individual error for each sample
+- Includes Pearson and Spearman correlation coefficients to quantify the relationship
+
+**Right subplot (Binned Statistics):**
+- **X-axis**: Sigma (noise level)
+- **Y-axis**: Mean absolute error per bin
+- Error bars show standard deviation within each bin
+- Helps identify if model performance degrades at specific noise levels
+
+**What to look for:**
+- **No correlation (ρ ≈ 0)**: Error is independent of noise level (ideal)
+- **Positive correlation (ρ > 0)**: Error increases with noise level (common)
+- **Negative correlation (ρ < 0)**: Error decreases with noise level (unusual, may indicate overfitting to high noise)
+- **Flat binned statistics**: Consistent performance across noise levels
+- **Rising/falling trend**: Performance varies with noise level
 
 ## Using Trained Models
 
