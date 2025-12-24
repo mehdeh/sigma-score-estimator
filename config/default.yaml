@@ -7,8 +7,8 @@ model:
 
 # Noise generation configuration
 noise:
-  sigma_min: 0.00001  # 1e-5, matching original draft notebook
-  sigma_max: 4.0  # matching original draft notebook  
+  sigma_min: 0.01  # Tested and works well with omega_chi_zscore
+  sigma_max: 10.0  # Tested and works well with omega_chi_zscore
   strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
   num_samples: 100  # Number of pre-filtered samples for select_batch strategy
 
@@ -20,30 +20,29 @@ training:
   sigma_cal: 0.0  # Calibration parameter for sigma_calibrated loss
   epochs: 100
   
-  # Optimizer configuration
-  optimizer: "adam"  # Options: "adam", "sgd"
+  # Optimizer configuration (both Adam and SGD tested and work well)
+  optimizer: "adam"  # Options: "adam" (recommended), "sgd" (also works well)
   optimizer_params:
-    # Adam parameters
+    # Adam parameters (default, works well)
     betas: [0.9, 0.999]
     eps: 1.0e-8
-    # SGD parameters
+    # SGD parameters (if using SGD: --optimizer sgd)
     momentum: 0.9
     nesterov: true
   
-  learning_rate: 0.001
+  learning_rate: 0.001  # Tested: works well with both Adam and SGD
   weight_decay: 0.0
   
-  # Learning rate scheduler configuration
-  scheduler: "cosine"  # Options: "cosine", "step", "none"
+  # Learning rate scheduler (improves convergence)
+  scheduler: "cosine"  # Options: "cosine" (recommended), "step", "none"
   scheduler_params:
-    # For cosine scheduler: T_max should be >= total epochs to avoid LR cycling
-    # Set to null to automatically use the epochs value
-    T_max: null  # Will default to epochs if null
-    # For step scheduler
-    step_size: 30
+    # For best results: T_max = epochs OR T_max = epochs/2 (for LR cycling)
+    # T_max < epochs can help escape local minima (tested successfully)
+    T_max: 100  # Set this equal to epochs, or epochs/2 for 200-epoch training
+    step_size: 30  # For step scheduler
     gamma: 0.1
   
-  early_stopping: true
+  early_stopping: false  # Set to false for full training (tested successfully)
   patience: 10  # Number of epochs to wait before early stopping
 
 # Data configuration

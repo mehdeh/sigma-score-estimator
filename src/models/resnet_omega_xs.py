@@ -67,7 +67,7 @@ class ResNetOmegaXSigma(nn.Module):
         Scalar tensor of shape (batch_size, 1) representing omega(x, sigma)
     """
     
-    def __init__(self, block=BasicBlock, num_blocks=[2, 2, 2, 2], dropout_rate=0.1):
+    def __init__(self, block=BasicBlock, num_blocks=[2, 2, 2, 2], dropout_rate=0.0):
         super(ResNetOmegaXSigma, self).__init__()
         self.in_planes = 64
 

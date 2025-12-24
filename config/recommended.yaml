@@ -1,0 +1,61 @@
+# Recommended configuration based on successful training experiments
+# This config has been tested and shows good convergence
+
+model:
+  type: "omega_x_sigma"
+  backbone: "resnet18"
+
+noise:
+  sigma_min: 0.01  # Tested successfully
+  sigma_max: 10.0  # Tested successfully
+  strategy: "uniform"  # uniform works well, log_uniform can also be tried
+  num_samples: 100
+
+training:
+  loss_type: "omega_chi_zscore"  # Tested and works well
+  sigma_cal: 0.0
+  
+  epochs: 100  # Change to 200 for longer training with better results
+  
+  # Optimizer: Both Adam and SGD work well
+  optimizer: "adam"  # Default, good convergence. Try "sgd" for alternative
+  optimizer_params:
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    momentum: 0.9      # For SGD
+    nesterov: true     # For SGD
+  
+  learning_rate: 0.001  # Works well for both Adam and SGD
+  weight_decay: 0.0
+  
+  # LR Scheduler: Cosine works better than no scheduler
+  scheduler: "cosine"  # Recommended. Try "none" if you want constant LR
+  scheduler_params:
+    # IMPORTANT: For 100 epochs, use T_max=100
+    #            For 200 epochs, use T_max=100 (allows LR cycling for better results)
+    T_max: 100
+    step_size: 30
+    gamma: 0.1
+  
+  early_stopping: false  # Disable for full training (tested successfully)
+  patience: 10
+
+data:
+  batch_size: 128
+  num_workers: 4
+  train_val_split: [0.85, 0.10]
+  test_split: 0.05
+  data_root: "./data"
+
+checkpoint:
+  save_format: "pkl"
+  save_best: true
+  save_every: 10
+
+logging:
+  log_interval: 100
+  plot_interval: 1
+
+device: "cuda"
+seed: 42
+

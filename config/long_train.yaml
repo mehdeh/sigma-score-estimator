@@ -1,0 +1,44 @@
+# Long training configuration (200 epochs)
+# Based on successful exp_20251223_190115 config
+
+model:
+  type: "omega_x_sigma"
+  backbone: "resnet18"
+
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  num_samples: 100
+
+training:
+  loss_type: "omega_chi_zscore"
+  sigma_cal: 0.0
+  epochs: 200
+  learning_rate: 0.001
+  weight_decay: 0.0
+  scheduler: "cosine"
+  scheduler_params:
+    T_max: 100  # Causes LR to cycle once at epoch 100, which worked well!
+  early_stopping: false
+  patience: 10
+
+data:
+  batch_size: 128
+  num_workers: 4
+  train_val_split: [0.85, 0.10]
+  test_split: 0.05
+  data_root: "./data"
+
+checkpoint:
+  save_format: "pkl"
+  save_best: true
+  save_every: 10
+
+logging:
+  log_interval: 100
+  plot_interval: 1
+
+device: "cuda"
+seed: 42
+
