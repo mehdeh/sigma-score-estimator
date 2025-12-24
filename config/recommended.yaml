@@ -13,7 +13,6 @@ noise:
 
 training:
   loss_type: "omega_chi_zscore"  # Tested and works well
-  sigma_cal: 0.0
   
   epochs: 100  # Change to 200 for longer training with better results
   

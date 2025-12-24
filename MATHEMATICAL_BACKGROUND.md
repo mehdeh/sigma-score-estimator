@@ -331,114 +331,6 @@ $$
 
 ---
 
-### Loss Type 3: `omega_chi_approx` (Chi-Squared Approximation)
-
-**Description**: Uses the normal approximation of the chi-squared distribution.
-
-**Target**:
-
-$$
-\hat{\omega}_{\text{target}} = \frac{d + \sqrt{2d} \cdot Z}{\sigma}, \quad Z \sim \mathcal{N}(0, 1)
-$$
-
-**Loss Function**:
-
-$$
-\mathcal{L}_3 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d + \sqrt{2d} \cdot Z}{\sigma}\right)^2
-$$
-
-**Note**: $Z$ is sampled from standard normal distribution during training.
-
----
-
-### Loss Type 4: `omega_chi_mean` (Expected Chi-Squared)
-
-**Description**: Uses the expected value of $\lVert\epsilon\rVert_2^2$.
-
-**Target**:
-
-$$
-\hat{\omega}_{\text{target}} = \frac{d}{\sigma}
-$$
-
-**Loss Function**:
-
-$$
-\mathcal{L}_4 = \left(\hat{\omega}_\theta(\mathbf{x}, \sigma) - \frac{d}{\sigma}\right)^2
-$$
-
-**Advantage**: Deterministic target, no stochastic sampling required.
-
----
-
-### Loss Type 5: `sigma_direct` (Direct Sigma Estimation)
-
-**Description**: Introduces $\acute{\omega}_\theta$ which directly estimates $\sigma$.
-
-**Definition**:
-
-$$
-\hat{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\acute{\omega}_\theta(\mathbf{x}, \sigma)}
-$$
-
-**Transformation**:
-
-$$
-\acute{\omega}_\theta(\mathbf{x}, \sigma) = \frac{d}{\hat{\omega}_\theta(\mathbf{x}, \sigma)}
-$$
-
-**Loss Function**:
-
-$$
-\mathcal{L}_5 = \left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2
-$$
-
-**Interpretation**: The network learns to predict $\sigma$ directly, which is then inverted to obtain $\hat{\omega}$.
-
----
-
-### Loss Type 6: `sigma_normalized` (Normalized Sigma Estimation)
-
-**Description**: Normalized version of direct sigma estimation.
-
-**Loss Function**:
-
-$$
-\mathcal{L}_6 = \frac{\left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2}{\sigma}
-$$
-
-**Advantage**: Normalizes the loss by $\sigma$, giving more weight to errors at small noise levels.
-
----
-
-### Loss Type 7: `sigma_relative` (Relative Sigma Estimation)
-
-**Description**: Relative error formulation for sigma estimation.
-
-**Loss Function**:
-
-$$
-\mathcal{L}_7 = \frac{\left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - \sigma\right)^2}{\sigma^2}
-$$
-
-**Advantage**: Emphasizes relative error, making the loss scale-invariant with respect to $\sigma$.
-
----
-
-### Loss Type 8: `sigma_calibrated` (Calibrated Sigma Estimation)
-
-**Description**: Calibrated formulation similar to Sigma-Cal Loss [4].
-
-**Loss Function**:
-
-$$
-\mathcal{L}_8 = \left(\acute{\omega}_\theta(\mathbf{x}, \sigma) - (\sigma_{\text{cal}} - \sigma)\right)^2
-$$
-
-**Note**: $\sigma_{\text{cal}}$ is a calibration parameter that can be learned or set empirically.
-
----
-
 ### Loss Type 9: `omega_chi_zscore` (Chi-Squared Z-Score)
 
 **Description**: Model learns the z-score (standardized value) of the chi-squared distribution.
@@ -480,13 +372,7 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 | Loss Type | Name | Target Quantity | Key Feature | Estimates |
 |-----------|------|----------------|-------------|-----------|
 | 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Corrected formulation | $\nabla_\sigma \log[\sigma^d p]$ |
-| 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based | $\nabla_\sigma \log[\sigma^d p]$ |
-| 3 | `omega_chi_approx` | $\frac{d + \sqrt{2d} Z}{\sigma}$ | Chi-squared approximation | $\nabla_\sigma \log[\sigma^d p]$ |
-| 4 | `omega_chi_mean` | $\frac{d}{\sigma}$ | Expected value | $\nabla_\sigma \log[\sigma^d p]$ |
-| 5 | `sigma_direct` | $\sigma$ | Direct sigma prediction | $\nabla_\sigma \log[\sigma^d p]$ |
-| 6 | `sigma_normalized` | $\sigma$ (normalized) | Weighted by $1/\sigma$ | $\nabla_\sigma \log[\sigma^d p]$ |
-| 7 | `sigma_relative` | $\sigma$ (relative) | Scale-invariant | $\nabla_\sigma \log[\sigma^d p]$ |
-| 8 | `sigma_calibrated` | $\sigma_{\text{cal}} - \sigma$ | Calibrated prediction | $\nabla_\sigma \log[\sigma^d p]$ |
+| 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based, numerically stable | $\nabla_\sigma \log[\sigma^d p]$ |
 | 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
 
 ---
@@ -495,19 +381,16 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 
 ### 7.1 Model Output Interpretation
 
-**For Loss Types 1-4**: The model directly outputs $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ which estimates $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$.
+**For Loss Types 1-2**: The model directly outputs $\hat{\omega}_\theta(\mathbf{x}, \sigma)$ which estimates $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$.
 - No transformation needed during inference
 - Output is immediately usable for sampling
-
-**For Loss Types 5-8**: The model outputs $\acute{\omega}_\theta$ (sigma estimate or related quantity).
-- During training: Model learns to predict sigma (or calibrated variant)
-- During inference: Transform applied: $\hat{\omega} = d / \acute{\omega}$ (or variant)
-- **Important**: Transformation is NOT part of loss computation
+- Loss Type 2 (`omega_epsilon`) is more numerically stable for small $\sigma$ values
 
 **For Loss Type 9**: The model outputs z-score of chi-squared distribution.
 - During training: Model learns z-score $(||\epsilon||^2 - d) / \sqrt{2d}$
 - During inference: Transform applied: $\hat{\omega} = (\acute{\omega} \cdot \sqrt{2d} + d) / \sigma$
 - **Important**: Transformation is NOT part of loss computation
+- Provides normalized learning target with approximately zero mean and unit variance
 
 ### 7.2 Converting Between Estimators
 
@@ -525,16 +408,17 @@ $$
 
 ### 7.3 Numerical Stability
 
-- For Loss Types 5-8, ensure $\hat{\omega}_\theta > \epsilon$ (small positive constant) to avoid division by zero
-- Use appropriate activation functions (e.g., softplus, exponential with offset) to ensure positive outputs
+- **Loss Type 1 (`omega_hat`)**: Stable for most $\sigma$ ranges, but may have numerical issues for very small $\sigma$ due to division by $\sigma^3$
+- **Loss Type 2 (`omega_epsilon`)**: More numerically stable for small $\sigma$ values, recommended when using small noise levels
+- **Loss Type 9 (`omega_chi_zscore`)**: Learns normalized quantities, provides stable training dynamics
 - For very small $\sigma$ values, consider using log-space computations
 
 ### 7.4 Training Considerations
 
-- **Loss Types 1-4**: Direct estimation approaches, suitable for most applications
-- **Loss Type 4**: Simplest formulation with deterministic target, good baseline
-- **Loss Types 5-8**: Indirect estimation via $\sigma$ prediction, may provide better numerical properties
-- **Loss Type 9**: Learns normalized z-score, potentially more stable training dynamics
+- **Loss Type 1 (`omega_hat`)**: Baseline formulation, suitable for most applications with moderate $\sigma$ ranges
+- **Loss Type 2 (`omega_epsilon`)**: Recommended for small $\sigma$ values or when using log-uniform noise sampling
+- **Loss Type 9 (`omega_chi_zscore`)**: Learns normalized z-score with zero mean and unit variance, potentially more stable training dynamics
+- All three loss types have been tested and show good convergence with default hyperparameters
 - The corrected objective (using $\hat{\omega}_\theta$) ensures monotonic decrease of $\sigma$ during sampling
 
 ### 7.5 Output Transformation Architecture
@@ -566,9 +450,7 @@ This separation ensures:
 
 | Loss Types | Model Learns | Training Target | Inference Transform | Final Output |
 |------------|--------------|-----------------|---------------------|--------------|
-| 1-4 | $\hat{\omega}$ | $\hat{\omega}$-related | None (identity) | $\hat{\omega}$ |
-| 5-7 | $\sigma$ | $\sigma$ | $d / \acute{\omega}$ | $\hat{\omega}$ |
-| 8 | $\sigma_{\text{cal}} - \sigma$ | $\sigma_{\text{cal}} - \sigma$ | $d / (\sigma_{\text{cal}} - \acute{\omega})$ | $\hat{\omega}$ |
+| 1-2 | $\hat{\omega}$ | $\hat{\omega}$-related | None (identity) | $\hat{\omega}$ |
 | 9 | z-score | $(\\|\epsilon\\|^2 - d) / \sqrt{2d}$ | $(\acute{\omega} \sqrt{2d} + d) / \sigma$ | $\hat{\omega}$ |
 
 ---
@@ -623,9 +505,7 @@ $$
 
 Models trained with different loss functions may output different quantities during training. During evaluation, these outputs are transformed to $\hat{\omega}$ space:
 
-- **Loss Types 1-4** (omega_hat, omega_epsilon, omega_chi_approx, omega_chi_mean): Model outputs $\hat{\omega}$ directly, no transformation needed
-- **Loss Types 5-7** (sigma_direct, sigma_normalized, sigma_relative): Model outputs $\sigma$ estimate, transform: $\hat{\omega} = d / \sigma$
-- **Loss Type 8** (sigma_calibrated): Model outputs $(\sigma_{\text{cal}} - \sigma)$, transform: $\hat{\omega} = d / (\sigma_{\text{cal}} - \text{output})$
+- **Loss Types 1-2** (omega_hat, omega_epsilon): Model outputs $\hat{\omega}$ directly, no transformation needed
 - **Loss Type 9** (omega_chi_zscore): Model outputs z-score, transform: $\hat{\omega} = (\text{output} \cdot \sqrt{2d} + d) / \sigma$
 
 where $d$ is the dimensionality of the input (e.g., $d = 3 \times 32 \times 32 = 3072$ for CIFAR-10).

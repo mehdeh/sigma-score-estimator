@@ -404,20 +404,28 @@ seed: 42
 
 #### Loss Functions
 
-**Omega-Based Losses** (Direct estimation):
-- `omega_hat`: Original formulation - ||x - x̃||² / σ³ (baseline)
-- `omega_epsilon`: Epsilon-based - ||ε||² / σ (more stable for small σ)
-- `omega_chi_approx`: Chi-squared approximation with stochastic sampling
-- `omega_chi_mean`: Expected chi-squared value (deterministic target)
-- `omega_chi_zscore`: **NEW** - Chi-squared z-score based estimation
+The framework supports three loss types, all tested and validated:
 
-**Sigma-Based Losses** (Indirect via σ estimation):
-- `sigma_direct`: Direct sigma estimation - model learns σ
-- `sigma_normalized`: Normalized by σ for balanced weighting
-- `sigma_relative`: Relative error formulation (scale-invariant)
-- `sigma_calibrated`: Calibrated estimation with σ_cal parameter
+1. **`omega_hat`**: Original formulation - ||x - x̃||² / σ³
+   - Direct estimation of omega
+   - Baseline approach, suitable for most applications
+   - No output transformation needed
 
-**Important Note**: Loss types 5-9 apply output transformations during inference (not during training). The model learns sigma or related quantities, which are then transformed to ω during evaluation and sampling.
+2. **`omega_epsilon`**: Epsilon-based - ||ε||² / σ
+   - More numerically stable for small σ values
+   - Recommended when using small noise levels or log-uniform sampling
+   - No output transformation needed
+
+3. **`omega_chi_zscore`**: Chi-squared z-score based estimation
+   - Model learns normalized z-score: (||ε||² - d) / √(2d)
+   - Provides stable training with zero-mean, unit-variance targets
+   - Output transformation applied during inference: ω = (output × √(2d) + d) / σ
+   - May benefit from longer training (200 epochs)
+
+**Important Notes**: 
+- Loss types 1-2 directly output omega (no transformation)
+- Loss type 9 applies output transformation during inference only (not during training)
+- All three loss types estimate the same quantity: ∇_σ log[σ^d p(x, σ)]
 
 For mathematical details and transformation formulas, see [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md)
 

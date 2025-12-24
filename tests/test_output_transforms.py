@@ -11,8 +11,6 @@ import numpy as np
 
 from src.training.output_transforms import (
     IdentityTransform,
-    SigmaToOmegaTransform,
-    SigmaCalibratedTransform,
     ChiZScoreTransform,
     TransformFactory,
 )
@@ -38,95 +36,6 @@ class TestIdentityTransform(unittest.TestCase):
         result = self.transform.apply(output, sigma=sigma)
         
         self.assertTrue(torch.allclose(result, output))
-
-
-class TestSigmaToOmegaTransform(unittest.TestCase):
-    """Test sigma to omega_hat transformation."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.transform = SigmaToOmegaTransform(image_dim=self.image_dim)
-    
-    def test_basic_transformation(self):
-        """Test d / sigma transformation."""
-        # If model predicts sigma = 2.0
-        output = torch.tensor([2.0])
-        expected = self.image_dim / 2.0  # omega_hat = d / sigma
-        
-        result = self.transform.apply(output)
-        
-        self.assertAlmostEqual(result.item(), expected, places=5)
-    
-    def test_batch_transformation(self):
-        """Test transformation on batch."""
-        output = torch.tensor([1.0, 2.0, 4.0])
-        expected = torch.tensor([
-            self.image_dim / 1.0,
-            self.image_dim / 2.0,
-            self.image_dim / 4.0
-        ])
-        
-        result = self.transform.apply(output)
-        
-        self.assertTrue(torch.allclose(result, expected, rtol=1e-5))
-    
-    def test_handles_negative_output(self):
-        """Test that transformation uses absolute value."""
-        output = torch.tensor([-2.0, 2.0])
-        
-        result = self.transform.apply(output)
-        
-        # Both should give same result (abs value used)
-        self.assertAlmostEqual(result[0].item(), result[1].item(), places=5)
-    
-    def test_epsilon_prevents_division_by_zero(self):
-        """Test that epsilon prevents division by zero."""
-        output = torch.tensor([0.0])
-        
-        # Should not raise error
-        result = self.transform.apply(output)
-        
-        # Result should be finite
-        self.assertTrue(torch.isfinite(result).all())
-
-
-class TestSigmaCalibratedTransform(unittest.TestCase):
-    """Test calibrated sigma transformation."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.sigma_cal = 10.0
-        self.transform = SigmaCalibratedTransform(
-            image_dim=self.image_dim,
-            sigma_cal=self.sigma_cal
-        )
-    
-    def test_calibrated_transformation(self):
-        """Test d / (sigma_cal - output) transformation."""
-        # Model predicts (sigma_cal - sigma) = 8.0
-        # So sigma = 10 - 8 = 2.0
-        # omega_hat = d / sigma = d / 2.0
-        output = torch.tensor([8.0])
-        expected = self.image_dim / 2.0
-        
-        result = self.transform.apply(output)
-        
-        self.assertAlmostEqual(result.item(), expected, places=5)
-    
-    def test_batch_calibrated_transformation(self):
-        """Test calibrated transformation on batch."""
-        # Model predicts sigma_cal - sigma
-        output = torch.tensor([9.0, 8.0, 5.0])
-        # Actual sigmas: 1.0, 2.0, 5.0
-        expected = torch.tensor([
-            self.image_dim / 1.0,
-            self.image_dim / 2.0,
-            self.image_dim / 5.0
-        ])
-        
-        result = self.transform.apply(output)
-        
-        self.assertTrue(torch.allclose(result, expected, rtol=1e-5))
 
 
 class TestChiZScoreTransform(unittest.TestCase):
@@ -189,21 +98,10 @@ class TestTransformFactory(unittest.TestCase):
     """Test transform factory for creating appropriate transforms."""
     
     def test_factory_creates_identity_for_omega_hat(self):
-        """Test factory returns IdentityTransform for loss types 1-4."""
-        for loss_type in ['omega_hat', 'omega_epsilon', 'omega_chi_approx', 'omega_chi_mean']:
+        """Test factory returns IdentityTransform for loss types 1-2."""
+        for loss_type in ['omega_hat', 'omega_epsilon']:
             transform = TransformFactory.get_transform(loss_type)
             self.assertIsInstance(transform, IdentityTransform)
-    
-    def test_factory_creates_sigma_transform_for_types_5_7(self):
-        """Test factory returns SigmaToOmegaTransform for loss types 5-7."""
-        for loss_type in ['sigma_direct', 'sigma_normalized', 'sigma_relative']:
-            transform = TransformFactory.get_transform(loss_type)
-            self.assertIsInstance(transform, SigmaToOmegaTransform)
-    
-    def test_factory_creates_calibrated_for_type_8(self):
-        """Test factory returns SigmaCalibratedTransform for loss type 8."""
-        transform = TransformFactory.get_transform('sigma_calibrated', sigma_cal=5.0)
-        self.assertIsInstance(transform, SigmaCalibratedTransform)
     
     def test_factory_creates_zscore_for_type_9(self):
         """Test factory returns ChiZScoreTransform for loss type 9."""
@@ -213,7 +111,7 @@ class TestTransformFactory(unittest.TestCase):
     def test_factory_with_custom_image_dim(self):
         """Test factory respects custom image dimension."""
         image_dim = 1024
-        transform = TransformFactory.get_transform('sigma_direct', image_dim=image_dim)
+        transform = TransformFactory.get_transform('omega_chi_zscore', image_dim=image_dim)
         
         self.assertEqual(transform.image_dim, image_dim)
     
@@ -227,9 +125,9 @@ class TestTransformFactory(unittest.TestCase):
         available = TransformFactory.get_available_transforms()
         
         self.assertIn('omega_hat', available)
-        self.assertIn('sigma_direct', available)
+        self.assertIn('omega_epsilon', available)
         self.assertIn('omega_chi_zscore', available)
-        self.assertEqual(len(available), 9)
+        self.assertEqual(len(available), 3)
 
 
 class TestTransformIntegration(unittest.TestCase):
@@ -242,13 +140,11 @@ class TestTransformIntegration(unittest.TestCase):
         sigma = torch.rand(batch_size) * 5.0 + 0.1  # Sigma in [0.1, 5.1]
         
         loss_types = [
-            'omega_hat', 'omega_epsilon', 'omega_chi_approx', 'omega_chi_mean',
-            'sigma_direct', 'sigma_normalized', 'sigma_relative', 
-            'sigma_calibrated', 'omega_chi_zscore'
+            'omega_hat', 'omega_epsilon', 'omega_chi_zscore'
         ]
         
         for loss_type in loss_types:
-            transform = TransformFactory.get_transform(loss_type, sigma_cal=10.0)
+            transform = TransformFactory.get_transform(loss_type)
             
             if loss_type == 'omega_chi_zscore':
                 result = transform.apply(output, sigma=sigma)
@@ -264,8 +160,8 @@ class TestTransformIntegration(unittest.TestCase):
             output = torch.randn(shape).abs() + 0.1
             sigma = torch.rand(10) + 0.1
             
-            transform = TransformFactory.get_transform('sigma_direct')
-            result = transform.apply(output)
+            transform = TransformFactory.get_transform('omega_chi_zscore')
+            result = transform.apply(output, sigma=sigma)
             
             # Should squeeze to 1D
             self.assertEqual(result.shape, (10,))

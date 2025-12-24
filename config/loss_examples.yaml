@@ -2,7 +2,11 @@
 # Copy one of these configurations to create your own custom config
 
 # ============================================================================
-# OMEGA-BASED LOSSES (Types 1-4): Direct estimation of omega
+# AVAILABLE LOSS TYPES
+# ============================================================================
+# 1. omega_hat: Original formulation - Direct estimation of omega
+# 2. omega_epsilon: Epsilon-based formulation - More numerically stable
+# 9. omega_chi_zscore: Chi-squared z-score - Normalized learning target
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -10,33 +14,63 @@
 # ---------------------------------------------------------------------------
 # Target: ||x - x̃||² / σ³
 # Description: Baseline formulation without approximations
+# Output: Model directly outputs omega (no transformation needed)
 # ---------------------------------------------------------------------------
 omega_hat_config:
   model:
     type: "omega_x_sigma"
+    backbone: "resnet18"
   
   noise:
-    sigma_min: 0.00001
-    sigma_max: 4.0
+    sigma_min: 0.01
+    sigma_max: 10.0
     strategy: "uniform"
   
   training:
     loss_type: "omega_hat"
     epochs: 100
     learning_rate: 0.001
+    optimizer: "adam"
+    weight_decay: 0.0
+    scheduler: "cosine"
+    scheduler_params:
+      T_max: 100
+    early_stopping: false
+  
+  data:
+    batch_size: 128
+    num_workers: 4
+    train_val_split: [0.85, 0.10]
+    test_split: 0.05
+    data_root: "./data"
+  
+  checkpoint:
+    save_format: "pkl"
+    save_best: true
+    save_every: 10
+  
+  logging:
+    log_interval: 100
+    plot_interval: 1
+  
+  device: "cuda"
+  seed: 42
 
 # ---------------------------------------------------------------------------
 # Loss Type 2: omega_epsilon (Epsilon-Based)
 # ---------------------------------------------------------------------------
 # Target: ||ε||² / σ
-# Description: More numerically stable for small sigma
+# Description: More numerically stable for small sigma values
+# Output: Model directly outputs omega (no transformation needed)
+# Recommended: Use log_uniform noise sampling for better coverage
 # ---------------------------------------------------------------------------
 omega_epsilon_config:
   model:
     type: "omega_x_sigma"
+    backbone: "resnet18"
   
   noise:
-    sigma_min: 0.00001  # Can use smaller values due to stability
+    sigma_min: 0.00001  # Can use smaller values due to numerical stability
     sigma_max: 4.0
     strategy: "log_uniform"  # Recommended for this loss
   
@@ -44,134 +78,80 @@ omega_epsilon_config:
     loss_type: "omega_epsilon"
     epochs: 100
     learning_rate: 0.001
+    optimizer: "adam"
+    weight_decay: 0.0
+    scheduler: "cosine"
+    scheduler_params:
+      T_max: 100
+    early_stopping: false
+  
+  data:
+    batch_size: 128
+    num_workers: 4
+    train_val_split: [0.85, 0.10]
+    test_split: 0.05
+    data_root: "./data"
+  
+  checkpoint:
+    save_format: "pkl"
+    save_best: true
+    save_every: 10
+  
+  logging:
+    log_interval: 100
+    plot_interval: 1
+  
+  device: "cuda"
+  seed: 42
 
 # ---------------------------------------------------------------------------
-# Loss Type 3: omega_chi_approx (Chi-Squared Approximation)
+# Loss Type 9: omega_chi_zscore (Chi-Squared Z-Score)
 # ---------------------------------------------------------------------------
-# Target: (d + √(2d) * Z) / σ, where Z ~ N(0,1)
-# Description: Uses normal approximation of chi-squared distribution
+# Target: (||ε||² - d) / √(2d)
+# Description: Model learns normalized z-score of chi-squared distribution
+# Output Transformation: omega = (output * √(2d) + d) / σ
+# Advantage: Normalized target with zero mean and unit variance
+# Note: Transformation is applied during inference, not during training
 # ---------------------------------------------------------------------------
-omega_chi_approx_config:
+omega_chi_zscore_config:
   model:
     type: "omega_x_sigma"
+    backbone: "resnet18"
   
   noise:
-    sigma_min: 0.0001
-    sigma_max: 4.0
+    sigma_min: 0.01
+    sigma_max: 10.0
     strategy: "uniform"
   
   training:
-    loss_type: "omega_chi_approx"
-    epochs: 100
+    loss_type: "omega_chi_zscore"
+    epochs: 200  # May benefit from longer training
     learning_rate: 0.001
-
-# ---------------------------------------------------------------------------
-# Loss Type 4: omega_chi_mean (Expected Chi-Squared)
-# ---------------------------------------------------------------------------
-# Target: d / σ
-# Description: Deterministic target based on expectation
-# ---------------------------------------------------------------------------
-omega_chi_mean_config:
-  model:
-    type: "omega_x_sigma"
+    optimizer: "adam"
+    weight_decay: 0.0
+    scheduler: "cosine"
+    scheduler_params:
+      T_max: 100  # Can use T_max < epochs for LR cycling
+    early_stopping: false
   
-  noise:
-    sigma_min: 0.0001
-    sigma_max: 4.0
-    strategy: "uniform"
+  data:
+    batch_size: 128
+    num_workers: 4
+    train_val_split: [0.85, 0.10]
+    test_split: 0.05
+    data_root: "./data"
   
-  training:
-    loss_type: "omega_chi_mean"
-    epochs: 100
-    learning_rate: 0.001
-    early_stopping: true
-    patience: 15  # May converge quickly
-
-# ============================================================================
-# SIGMA-BASED LOSSES (Types 5-8): Indirect estimation via sigma prediction
-# ============================================================================
-
-# ---------------------------------------------------------------------------
-# Loss Type 5: sigma_direct (Direct Sigma Estimation)
-# ---------------------------------------------------------------------------
-# Transformation: ω' = d / output
-# Target: σ
-# Description: Network learns to predict sigma directly
-# ---------------------------------------------------------------------------
-sigma_direct_config:
-  model:
-    type: "omega_x_sigma"
+  checkpoint:
+    save_format: "pkl"
+    save_best: true
+    save_every: 10
   
-  noise:
-    sigma_min: 0.01
-    sigma_max: 4.0
-    strategy: "uniform"
+  logging:
+    log_interval: 100
+    plot_interval: 1
   
-  training:
-    loss_type: "sigma_direct"
-    epochs: 100
-    learning_rate: 0.0005  # May need lower LR for stability
-
-# ---------------------------------------------------------------------------
-# Loss Type 6: sigma_normalized (Normalized Sigma Estimation)
-# ---------------------------------------------------------------------------
-# Loss: (ω' - σ)² / σ
-# Description: Normalizes by sigma to weight errors at different noise levels
-# ---------------------------------------------------------------------------
-sigma_normalized_config:
-  model:
-    type: "omega_x_sigma"
-  
-  noise:
-    sigma_min: 0.01
-    sigma_max: 4.0
-    strategy: "log_uniform"  # Recommended for normalized losses
-  
-  training:
-    loss_type: "sigma_normalized"
-    epochs: 100
-    learning_rate: 0.0005
-
-# ---------------------------------------------------------------------------
-# Loss Type 7: sigma_relative (Relative Sigma Estimation)
-# ---------------------------------------------------------------------------
-# Loss: (ω' - σ)² / σ²
-# Description: Scale-invariant relative error formulation
-# ---------------------------------------------------------------------------
-sigma_relative_config:
-  model:
-    type: "omega_x_sigma"
-  
-  noise:
-    sigma_min: 0.01
-    sigma_max: 4.0
-    strategy: "log_uniform"  # Recommended for relative losses
-  
-  training:
-    loss_type: "sigma_relative"
-    epochs: 100
-    learning_rate: 0.0005
-
-# ---------------------------------------------------------------------------
-# Loss Type 8: sigma_calibrated (Calibrated Sigma Estimation)
-# ---------------------------------------------------------------------------
-# Target: σ_cal - σ
-# Description: Calibrated formulation with learnable parameter
-# ---------------------------------------------------------------------------
-sigma_calibrated_config:
-  model:
-    type: "omega_x_sigma"
-  
-  noise:
-    sigma_min: 0.01
-    sigma_max: 4.0
-    strategy: "uniform"
-  
-  training:
-    loss_type: "sigma_calibrated"
-    sigma_cal: 1.0  # Calibration parameter (experiment with different values)
-    epochs: 100
-    learning_rate: 0.0005
+  device: "cuda"
+  seed: 42
 
 # ============================================================================
 # USAGE INSTRUCTIONS
@@ -179,24 +159,27 @@ sigma_calibrated_config:
 # 
 # To use one of these configurations:
 # 
-# 1. Copy the desired configuration block to a new file, e.g.:
+# 1. Copy the desired configuration block to a new file:
 #    cp config/loss_examples.yaml config/my_experiment.yaml
 # 
-# 2. Edit the file to include only the configuration you want, and add
-#    common parameters like data, checkpoint, logging, etc.
+# 2. Edit the file to include only the configuration you want
 # 
 # 3. Run training:
 #    python main.py train --config config/my_experiment.yaml
+# 
+# Or use command-line overrides:
+#    python main.py train --config config/default.yaml --loss-type omega_epsilon
 # 
 # ============================================================================
 # RECOMMENDATIONS
 # ============================================================================
 # 
 # - For baseline experiments: Use omega_hat
-# - For small sigma values: Use omega_epsilon or sigma-based losses
-# - For scale-invariance: Use sigma_relative
-# - For fast convergence: Use omega_chi_mean or sigma_direct
-# - For exploration: Try omega_chi_approx with stochastic sampling
+# - For small sigma values: Use omega_epsilon (more numerically stable)
+# - For normalized learning: Use omega_chi_zscore (stable training dynamics)
+# 
+# All three loss types have been tested and work well with the default
+# hyperparameters. The omega_chi_zscore loss type may benefit from longer
+# training (200 epochs) and LR cycling (T_max < epochs).
 # 
 # ============================================================================
-

@@ -11,193 +11,8 @@ import numpy as np
 
 from src.training.loss_functions import (
     LossFactory,
-    SigmaDirectLoss,
-    SigmaNormalizedLoss,
-    SigmaRelativeLoss,
-    SigmaCalibratedLoss,
     OmegaChiZScoreLoss,
 )
-
-
-class TestSigmaDirectLoss(unittest.TestCase):
-    """Test refactored SigmaDirectLoss (Type 5)."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.loss_fn = SigmaDirectLoss(image_dim=self.image_dim)
-    
-    def test_perfect_prediction(self):
-        """Test loss is zero when output equals sigma."""
-        batch_size = 4
-        output = torch.tensor([1.0, 2.0, 3.0, 4.0])
-        sigma = torch.tensor([1.0, 2.0, 3.0, 4.0])
-        
-        # Create dummy images (not used in loss)
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        self.assertAlmostEqual(loss.item(), 0.0, places=6)
-    
-    def test_non_zero_loss_for_incorrect_prediction(self):
-        """Test loss is non-zero when prediction is wrong."""
-        batch_size = 2
-        output = torch.tensor([1.0, 2.0])
-        sigma = torch.tensor([2.0, 4.0])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        self.assertGreater(loss.item(), 0.0)
-    
-    def test_loss_is_mse(self):
-        """Test that loss equals mean squared error."""
-        batch_size = 3
-        output = torch.tensor([1.0, 2.0, 3.0])
-        sigma = torch.tensor([1.5, 2.5, 3.5])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        # Manual MSE calculation
-        expected = torch.mean((output - sigma) ** 2)
-        
-        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
-
-
-class TestSigmaNormalizedLoss(unittest.TestCase):
-    """Test refactored SigmaNormalizedLoss (Type 6)."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.loss_fn = SigmaNormalizedLoss(image_dim=self.image_dim)
-    
-    def test_normalized_by_sigma(self):
-        """Test that loss is normalized by sigma."""
-        batch_size = 2
-        output = torch.tensor([1.0, 2.0])
-        sigma = torch.tensor([1.0, 2.0])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        # Manual calculation: ((output - sigma)^2 / sigma).mean()
-        expected = torch.mean(((output - sigma) ** 2) / sigma)
-        
-        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
-    
-    def test_weights_errors_by_sigma(self):
-        """Test that errors at small sigma have more weight."""
-        batch_size = 2
-        # Same absolute error, different sigmas
-        output = torch.tensor([1.0, 2.0])
-        sigma = torch.tensor([0.5, 2.0])  # Error: 0.5 for both
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        # Error at sigma=0.5 should be weighted more
-        error_1 = ((1.0 - 0.5) ** 2) / 0.5  # = 0.5
-        error_2 = ((2.0 - 2.0) ** 2) / 2.0  # = 0.0
-        expected = (error_1 + error_2) / 2
-        
-        self.assertAlmostEqual(loss.item(), expected, places=6)
-
-
-class TestSigmaRelativeLoss(unittest.TestCase):
-    """Test refactored SigmaRelativeLoss (Type 7)."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.loss_fn = SigmaRelativeLoss(image_dim=self.image_dim)
-    
-    def test_relative_error_formulation(self):
-        """Test that loss uses relative error formulation."""
-        batch_size = 2
-        output = torch.tensor([1.0, 2.0])
-        sigma = torch.tensor([2.0, 4.0])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        # Manual calculation: ((output - sigma)^2 / sigma^2).mean()
-        expected = torch.mean(((output - sigma) ** 2) / (sigma ** 2))
-        
-        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
-    
-    def test_scale_invariance(self):
-        """Test that relative loss is scale-invariant."""
-        batch_size = 2
-        
-        # First case: output=1, sigma=2 (50% relative error)
-        output1 = torch.tensor([1.0, 1.0])
-        sigma1 = torch.tensor([2.0, 2.0])
-        
-        # Second case: scaled by 10 (same 50% relative error)
-        output2 = torch.tensor([10.0, 10.0])
-        sigma2 = torch.tensor([20.0, 20.0])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss1 = self.loss_fn(output1, clean_images, noisy_images, sigma1)
-        loss2 = self.loss_fn(output2, clean_images, noisy_images, sigma2)
-        
-        # Should be equal due to scale invariance
-        self.assertAlmostEqual(loss1.item(), loss2.item(), places=6)
-
-
-class TestSigmaCalibratedLoss(unittest.TestCase):
-    """Test refactored SigmaCalibratedLoss (Type 8)."""
-    
-    def setUp(self):
-        self.image_dim = 3072
-        self.sigma_cal = 10.0
-        self.loss_fn = SigmaCalibratedLoss(
-            image_dim=self.image_dim,
-            sigma_cal=self.sigma_cal
-        )
-    
-    def test_calibrated_target(self):
-        """Test that target is sigma_cal - sigma."""
-        batch_size = 2
-        output = torch.tensor([8.0, 6.0])
-        sigma = torch.tensor([2.0, 4.0])
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        # Target: sigma_cal - sigma = [8.0, 6.0]
-        target = self.sigma_cal - sigma
-        expected = torch.mean((output - target) ** 2)
-        
-        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
-    
-    def test_perfect_calibrated_prediction(self):
-        """Test zero loss when output equals sigma_cal - sigma."""
-        batch_size = 2
-        sigma = torch.tensor([2.0, 3.0])
-        output = self.sigma_cal - sigma  # Perfect prediction
-        
-        clean_images = torch.randn(batch_size, 3, 32, 32)
-        noisy_images = torch.randn(batch_size, 3, 32, 32)
-        
-        loss = self.loss_fn(output, clean_images, noisy_images, sigma)
-        
-        self.assertAlmostEqual(loss.item(), 0.0, places=6)
 
 
 class TestOmegaChiZScoreLoss(unittest.TestCase):
@@ -284,30 +99,21 @@ class TestLossFactory(unittest.TestCase):
     """Test LossFactory for creating loss functions."""
     
     def test_factory_creates_all_loss_types(self):
-        """Test that factory can create all 9 loss types."""
+        """Test that factory can create all 3 loss types."""
         loss_types = [
-            'omega_hat', 'omega_epsilon', 'omega_chi_approx', 'omega_chi_mean',
-            'sigma_direct', 'sigma_normalized', 'sigma_relative', 
-            'sigma_calibrated', 'omega_chi_zscore'
+            'omega_hat', 'omega_epsilon', 'omega_chi_zscore'
         ]
         
         for loss_type in loss_types:
-            loss_fn = LossFactory.get_loss(loss_type, sigma_cal=5.0)
+            loss_fn = LossFactory.get_loss(loss_type)
             self.assertIsNotNone(loss_fn)
     
     def test_factory_passes_image_dim(self):
         """Test that factory passes image_dim to loss functions."""
         image_dim = 1024
-        loss_fn = LossFactory.get_loss('sigma_direct', image_dim=image_dim)
+        loss_fn = LossFactory.get_loss('omega_chi_zscore', image_dim=image_dim)
         
         self.assertEqual(loss_fn.image_dim, image_dim)
-    
-    def test_factory_passes_sigma_cal(self):
-        """Test that factory passes sigma_cal to calibrated loss."""
-        sigma_cal = 15.0
-        loss_fn = LossFactory.get_loss('sigma_calibrated', sigma_cal=sigma_cal)
-        
-        self.assertEqual(loss_fn.sigma_cal, sigma_cal)
     
     def test_factory_raises_on_unknown_loss(self):
         """Test that factory raises error for unknown loss type."""
@@ -315,10 +121,12 @@ class TestLossFactory(unittest.TestCase):
             LossFactory.get_loss('unknown_loss_type')
     
     def test_available_losses_list(self):
-        """Test that AVAILABLE_LOSSES contains all 9 types."""
+        """Test that AVAILABLE_LOSSES contains all 3 types."""
         available = LossFactory.AVAILABLE_LOSSES
         
-        self.assertEqual(len(available), 9)
+        self.assertEqual(len(available), 3)
+        self.assertIn('omega_hat', available)
+        self.assertIn('omega_epsilon', available)
         self.assertIn('omega_chi_zscore', available)
 
 
@@ -336,13 +144,11 @@ class TestLossIntegration(unittest.TestCase):
         output = torch.rand(batch_size) * 5.0 + 0.5
         
         loss_types = [
-            'omega_hat', 'omega_epsilon', 'omega_chi_approx', 'omega_chi_mean',
-            'sigma_direct', 'sigma_normalized', 'sigma_relative', 
-            'sigma_calibrated', 'omega_chi_zscore'
+            'omega_hat', 'omega_epsilon', 'omega_chi_zscore'
         ]
         
         for loss_type in loss_types:
-            loss_fn = LossFactory.get_loss(loss_type, sigma_cal=10.0)
+            loss_fn = LossFactory.get_loss(loss_type)
             loss = loss_fn(output, clean_images, noisy_images, sigma)
             
             self.assertTrue(torch.isfinite(loss), 
@@ -360,7 +166,7 @@ class TestLossIntegration(unittest.TestCase):
         noise = torch.randn_like(clean_images)
         noisy_images = clean_images + noise * sigma.view(-1, 1, 1, 1)
         
-        loss_types = ['sigma_direct', 'sigma_normalized', 'omega_chi_zscore']
+        loss_types = ['omega_hat', 'omega_epsilon', 'omega_chi_zscore']
         
         for loss_type in loss_types:
             # Create fresh output tensor for each loss type
@@ -379,7 +185,7 @@ class TestLossIntegration(unittest.TestCase):
             loss.backward()
             
             # At least clean_images should have gradients (used in computing target)
-            if loss_type == 'omega_chi_zscore':
+            if loss_type in ['omega_hat', 'omega_epsilon', 'omega_chi_zscore']:
                 self.assertIsNotNone(clean_images.grad,
                                     f"Loss type {loss_type} produced no gradients")
             

@@ -75,8 +75,7 @@ class TestEvaluatorWithTransforms(unittest.TestCase):
         """Test that evaluator initializes the correct transform."""
         loss_types_and_transforms = [
             ('omega_hat', 'IdentityTransform'),
-            ('sigma_direct', 'SigmaToOmegaTransform'),
-            ('sigma_calibrated', 'SigmaCalibratedTransform'),
+            ('omega_epsilon', 'IdentityTransform'),
             ('omega_chi_zscore', 'ChiZScoreTransform'),
         ]
         
@@ -97,7 +96,7 @@ class TestEvaluatorWithTransforms(unittest.TestCase):
     
     def test_evaluator_applies_transform_in_evaluation(self):
         """Test that evaluator applies transform during evaluation."""
-        config = self._create_config('sigma_direct')
+        config = self._create_config('omega_chi_zscore')
         
         evaluator = OmegaEvaluator(
             model=self.model,
@@ -151,8 +150,8 @@ class TestEvaluatorWithTransforms(unittest.TestCase):
     
     def test_predict_batch_applies_transform(self):
         """Test that predict_batch applies output transform."""
-        # Test with sigma_direct (should apply d/output transform)
-        config = self._create_config('sigma_direct')
+        # Test with omega_chi_zscore (should apply z-score transform)
+        config = self._create_config('omega_chi_zscore')
         
         evaluator = OmegaEvaluator(
             model=self.model,
@@ -181,7 +180,7 @@ class TestEvaluatorWithTransforms(unittest.TestCase):
         sigma = torch.ones(4) * 2.0
         
         # Create evaluators with different loss types
-        loss_types = ['omega_hat', 'sigma_direct']
+        loss_types = ['omega_hat', 'omega_epsilon']
         predictions = {}
         
         for loss_type in loss_types:
@@ -212,19 +211,6 @@ class TestTransformConsistency(unittest.TestCase):
         self.image_dim = 3072
         self.batch_size = 4
     
-    def test_sigma_direct_transform_inverse_of_loss(self):
-        """Test that sigma_direct transform is inverse of what loss learns."""
-        # Model learns sigma
-        model_output_sigma = torch.tensor([1.0, 2.0, 3.0, 4.0])
-        
-        # Transform converts sigma to omega_hat: d / sigma
-        transform = TransformFactory.get_transform('sigma_direct', image_dim=self.image_dim)
-        omega_hat = transform.apply(model_output_sigma)
-        
-        expected_omega_hat = self.image_dim / model_output_sigma
-        
-        self.assertTrue(torch.allclose(omega_hat, expected_omega_hat, rtol=1e-5))
-    
     def test_zscore_transform_reverses_zscore_computation(self):
         """Test that z-score transform correctly reverses z-score computation."""
         # Simulate: ||epsilon||^2 = d + z * sqrt(2d)
@@ -251,13 +237,11 @@ class TestTransformConsistency(unittest.TestCase):
         sigma = torch.rand(10) * 3.0 + 0.5
         
         loss_types = [
-            'omega_hat', 'omega_epsilon', 'omega_chi_approx', 'omega_chi_mean',
-            'sigma_direct', 'sigma_normalized', 'sigma_relative',
-            'sigma_calibrated', 'omega_chi_zscore'
+            'omega_hat', 'omega_epsilon', 'omega_chi_zscore'
         ]
         
         for loss_type in loss_types:
-            transform = TransformFactory.get_transform(loss_type, sigma_cal=10.0, image_dim=self.image_dim)
+            transform = TransformFactory.get_transform(loss_type, image_dim=self.image_dim)
             
             if loss_type == 'omega_chi_zscore':
                 # For z-score, use values around 0

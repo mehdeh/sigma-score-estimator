@@ -118,9 +118,7 @@ def validate_config(config):
         raise ValueError("Training config must specify 'loss_type'")
     
     valid_loss_types = [
-        'omega_hat', 'omega_epsilon', 'omega_chi_approx', 
-        'omega_chi_mean', 'sigma_direct', 'sigma_normalized', 
-        'sigma_relative', 'sigma_calibrated', 'omega_chi_zscore'
+        'omega_hat', 'omega_epsilon', 'omega_chi_zscore'
     ]
     if config['training']['loss_type'] not in valid_loss_types:
         raise ValueError(

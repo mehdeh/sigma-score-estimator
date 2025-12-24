@@ -163,12 +163,9 @@ noise:
   strategy: "uniform"
   
 training:
-  loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_approx,
-                          #          omega_chi_mean, sigma_direct, sigma_normalized,
-                          #          sigma_relative, sigma_calibrated, omega_chi_zscore
+  loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_zscore
   epochs: 100
   learning_rate: 0.001
-  sigma_cal: 0.0          # Calibration parameter (for sigma_calibrated loss)
 ```
 
 ## 📈 Monitoring Training

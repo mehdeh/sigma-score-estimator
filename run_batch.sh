@@ -12,12 +12,7 @@ EPOCHS=30
 LOSS_TYPES=(
   "omega_hat"
   "omega_epsilon"
-  "omega_chi_approx"
-  "omega_chi_mean"
-  "sigma_direct"
-  "sigma_normalized"
-  "sigma_relative"
-  "sigma_calibrated"
+  "omega_chi_zscore"
 )
 
 # List of model types to iterate over

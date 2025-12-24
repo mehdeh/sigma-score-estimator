@@ -18,8 +18,7 @@ where ε = (x̃ - x) / σ
 
 Output Transformations:
 -----------------------
-For loss types 1-4: No transformation (model outputs omega_hat directly)
-For loss types 5-8: Transform sigma estimates to omega_hat
+For loss types 1-2: No transformation (model outputs omega_hat directly)
 For loss type 9: Transform chi-squared z-score to omega_hat
 
 Author: Sigma Score Estimator Team
@@ -61,7 +60,7 @@ class IdentityTransform(OutputTransform):
     """
     Identity transformation (no transformation).
     
-    Used for loss types 1-4 where model directly outputs omega_hat.
+    Used for loss types 1-2 where model directly outputs omega_hat.
     """
     
     def __init__(self):
@@ -79,107 +78,6 @@ class IdentityTransform(OutputTransform):
             Tensor: Same as input
         """
         return output
-
-
-class SigmaToOmegaTransform(OutputTransform):
-    """
-    Transform sigma estimate to omega_hat.
-    
-    Transformation: omega_hat = d / omega_acute
-    
-    Used for loss types 5-7 (sigma_direct, sigma_normalized, sigma_relative)
-    where model outputs omega_acute (sigma estimate).
-    """
-    
-    def __init__(self, image_dim=3072, epsilon=1e-8):
-        """
-        Args:
-            image_dim (int): Dimensionality of images (d)
-            epsilon (float): Small constant to prevent division by zero
-        """
-        self.image_dim = image_dim
-        self.epsilon = epsilon
-    
-    def apply(self, output, sigma=None, **kwargs):
-        """
-        Transform sigma estimate to omega_hat.
-        
-        Args:
-            output (Tensor): Model output (omega_acute = sigma estimate)
-            sigma (Tensor, optional): Not used in transformation
-            
-        Returns:
-            Tensor: omega_hat = d / omega_acute
-        """
-        # Ensure output is 1D
-        if output.dim() > 1:
-            output = output.squeeze()
-        
-        # Transform: omega_hat = d / omega_acute
-        # Add epsilon to prevent division by zero
-        omega_hat = self.image_dim / (torch.abs(output) + self.epsilon)
-        
-        return omega_hat
-
-
-class SigmaCalibratedTransform(OutputTransform):
-    """
-    Transform calibrated sigma estimate to omega_hat.
-    
-    Transformation: omega_hat = d / (sigma_cal - omega_acute)
-    
-    Used for loss type 8 (sigma_calibrated) where model outputs
-    omega_acute = sigma_cal - sigma.
-    """
-    
-    def __init__(self, image_dim=3072, sigma_cal=0.0, epsilon=1e-8):
-        """
-        Args:
-            image_dim (int): Dimensionality of images (d)
-            sigma_cal (float): Calibration parameter
-            epsilon (float): Small constant to prevent division by zero
-        """
-        self.image_dim = image_dim
-        self.sigma_cal = sigma_cal
-        self.epsilon = epsilon
-    
-    def apply(self, output, sigma=None, **kwargs):
-        """
-        Transform calibrated sigma estimate to omega_hat.
-        
-        Args:
-            output (Tensor): Model output (omega_acute = sigma_cal - sigma)
-            sigma (Tensor, optional): Not used in transformation
-            
-        Returns:
-            Tensor: omega_hat = d / (sigma_cal - omega_acute)
-        """
-        # Ensure output is 1D
-        if output.dim() > 1:
-            output = output.squeeze()
-        
-        # Transform: omega_hat = d / (sigma_cal - omega_acute)
-        # Since omega_acute = sigma_cal - sigma, we have:
-        # sigma = sigma_cal - omega_acute
-        # omega_hat = d / sigma = d / (sigma_cal - omega_acute)
-        
-        # Note: For the calibrated loss, output IS (sigma_cal - sigma)
-        # So we need: omega_hat = d / (sigma_cal - output)
-        # But this simplifies to: omega_hat = d / predicted_sigma_diff
-        # Actually, let's reconsider: if model learns (sigma_cal - sigma),
-        # then to get sigma: sigma = sigma_cal - output
-        # then omega_hat = d / sigma = d / (sigma_cal - output)
-        
-        # Wait, let me re-read the plan and math docs...
-        # The model learns omega_acute which should equal (sigma_cal - sigma)
-        # To get omega_hat, we need d/sigma
-        # sigma = sigma_cal - omega_acute = sigma_cal - output
-        # So omega_hat = d / (sigma_cal - output)
-        
-        denominator = self.sigma_cal - output
-        omega_hat = self.image_dim / (torch.abs(denominator) + self.epsilon)
-        
-        return omega_hat
 
 
 class ChiZScoreTransform(OutputTransform):
@@ -246,33 +144,22 @@ class TransformFactory:
     
     # Mapping of loss types to transform classes
     TRANSFORM_MAP = {
-        # Loss types 1-4: Direct omega_hat estimation, no transform
+        # Loss types 1-2: Direct omega_hat estimation, no transform
         'omega_hat': IdentityTransform,
         'omega_epsilon': IdentityTransform,
-        'omega_chi_approx': IdentityTransform,
-        'omega_chi_mean': IdentityTransform,
-        
-        # Loss types 5-7: Sigma-based estimation
-        'sigma_direct': SigmaToOmegaTransform,
-        'sigma_normalized': SigmaToOmegaTransform,
-        'sigma_relative': SigmaToOmegaTransform,
-        
-        # Loss type 8: Calibrated sigma estimation
-        'sigma_calibrated': SigmaCalibratedTransform,
         
         # Loss type 9: Chi-squared z-score
         'omega_chi_zscore': ChiZScoreTransform,
     }
     
     @staticmethod
-    def get_transform(loss_type, image_dim=3072, sigma_cal=0.0):
+    def get_transform(loss_type, image_dim=3072):
         """
         Get the appropriate output transform for a loss type.
         
         Args:
             loss_type (str): Type of loss function used during training
             image_dim (int): Dimensionality of images (default: 3072 for CIFAR-10)
-            sigma_cal (float): Calibration parameter (only for sigma_calibrated)
             
         Returns:
             OutputTransform: Transform instance for the specified loss type
@@ -291,10 +178,6 @@ class TransformFactory:
         # Instantiate with appropriate parameters
         if transform_class == IdentityTransform:
             return transform_class()
-        elif transform_class == SigmaToOmegaTransform:
-            return transform_class(image_dim=image_dim)
-        elif transform_class == SigmaCalibratedTransform:
-            return transform_class(image_dim=image_dim, sigma_cal=sigma_cal)
         elif transform_class == ChiZScoreTransform:
             return transform_class(image_dim=image_dim)
         else:
@@ -321,19 +204,9 @@ def get_transform_info():
     print("=" * 80)
     
     transform_info = [
-        ("Loss Types 1-4", "IdentityTransform", "output (no change)"),
+        ("Loss Types 1-2", "IdentityTransform", "output (no change)"),
         ("omega_hat", "No transform", "Model outputs ω directly"),
         ("omega_epsilon", "No transform", "Model outputs ω directly"),
-        ("omega_chi_approx", "No transform", "Model outputs ω directly"),
-        ("omega_chi_mean", "No transform", "Model outputs ω directly"),
-        ("", "", ""),
-        ("Loss Types 5-7", "SigmaToOmegaTransform", "d / output"),
-        ("sigma_direct", "σ → ω", "ω = d / σ"),
-        ("sigma_normalized", "σ → ω", "ω = d / σ"),
-        ("sigma_relative", "σ → ω", "ω = d / σ"),
-        ("", "", ""),
-        ("Loss Type 8", "SigmaCalibratedTransform", "d / (σ_cal - output)"),
-        ("sigma_calibrated", "(σ_cal - σ) → ω", "ω = d / σ"),
         ("", "", ""),
         ("Loss Type 9", "ChiZScoreTransform", "(output * √(2d) + d) / σ"),
         ("omega_chi_zscore", "z-score → ω", "ω = ||ε||² / σ"),
