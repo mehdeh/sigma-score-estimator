@@ -70,6 +70,10 @@ class OmegaTrainer:
             device=device
         )
         
+        # Initialize logger (must be before optimizer/scheduler creation)
+        log_file = os.path.join(exp_dir, 'train.log')
+        self.logger = setup_logger('OmegaTrainer', log_file)
+        
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
         sigma_cal = config['training'].get('sigma_cal', 0.0)
@@ -84,10 +88,6 @@ class OmegaTrainer:
         
         # Initialize learning rate scheduler
         self.scheduler = self._create_scheduler(config)
-        
-        # Initialize logger
-        log_file = os.path.join(exp_dir, 'train.log')
-        self.logger = setup_logger('OmegaTrainer', log_file)
         
         # Initialize metrics logger
         self.metrics_logger = MetricsLogger(exp_dir)
