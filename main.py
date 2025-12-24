@@ -330,6 +330,11 @@ def main():
     train_parser.add_argument('--sigma-max', type=float, help='Maximum noise level')
     train_parser.add_argument('--epochs', type=int, help='Number of epochs')
     train_parser.add_argument('--learning-rate', type=float, help='Learning rate')
+    train_parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'],
+                             help='Optimizer type')
+    train_parser.add_argument('--weight-decay', type=float, help='Weight decay')
+    train_parser.add_argument('--scheduler', type=str, choices=['cosine', 'step', 'none'],
+                             help='Learning rate scheduler')
     train_parser.add_argument('--batch-size', type=int, help='Batch size')
     train_parser.add_argument('--device', type=str, help='Device (cuda/cpu)')
     train_parser.add_argument('--seed', type=int, help='Random seed')

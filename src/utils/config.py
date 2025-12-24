@@ -156,11 +156,20 @@ def create_default_config():
         'training': {
             'loss_type': 'omega_hat',
             'epochs': 100,
+            'optimizer': 'adam',
+            'optimizer_params': {
+                'betas': [0.9, 0.999],
+                'eps': 1.0e-8,
+                'momentum': 0.9,
+                'nesterov': True,
+            },
             'learning_rate': 0.001,
             'weight_decay': 0.0,
             'scheduler': 'cosine',
             'scheduler_params': {
-                'T_max': 100,
+                'T_max': None,
+                'step_size': 30,
+                'gamma': 0.1,
             },
             'early_stopping': True,
             'patience': 10,
@@ -214,8 +223,14 @@ def override_config_with_args(config, args):
         config['training']['loss_type'] = args.loss_type
     if hasattr(args, 'epochs') and args.epochs is not None:
         config['training']['epochs'] = args.epochs
+    if hasattr(args, 'optimizer') and args.optimizer is not None:
+        config['training']['optimizer'] = args.optimizer
     if hasattr(args, 'learning_rate') and args.learning_rate is not None:
         config['training']['learning_rate'] = args.learning_rate
+    if hasattr(args, 'weight_decay') and args.weight_decay is not None:
+        config['training']['weight_decay'] = args.weight_decay
+    if hasattr(args, 'scheduler') and args.scheduler is not None:
+        config['training']['scheduler'] = args.scheduler
     if hasattr(args, 'early_stopping') and args.early_stopping is not None:
         config['training']['early_stopping'] = args.early_stopping
     if hasattr(args, 'batch_size') and args.batch_size is not None:

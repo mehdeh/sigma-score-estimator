@@ -80,27 +80,10 @@ class OmegaTrainer:
         )
         
         # Initialize optimizer
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=self.learning_rate,
-            weight_decay=self.weight_decay
-        )
+        self.optimizer = self._create_optimizer(config)
         
         # Initialize learning rate scheduler
-        scheduler_type = config['training'].get('scheduler', 'cosine')
-        if scheduler_type == 'cosine':
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer,
-                T_max=config['training']['scheduler_params'].get('T_max', self.epochs)
-            )
-        elif scheduler_type == 'step':
-            self.scheduler = torch.optim.lr_scheduler.StepLR(
-                self.optimizer,
-                step_size=config['training']['scheduler_params'].get('step_size', 30),
-                gamma=config['training']['scheduler_params'].get('gamma', 0.1)
-            )
-        else:
-            self.scheduler = None
+        self.scheduler = self._create_scheduler(config)
         
         # Initialize logger
         log_file = os.path.join(exp_dir, 'train.log')
@@ -123,6 +106,96 @@ class OmegaTrainer:
         self.logger.info(f"Initialized OmegaTrainer with model type: {self.model_type}")
         self.logger.info(f"Loss function: {config['training']['loss_type']}")
         self.logger.info(f"Noise strategy: {config['noise']['strategy']}")
+        self.logger.info(f"Optimizer: {config['training'].get('optimizer', 'adam').upper()}")
+        if self.scheduler is not None:
+            self.logger.info(f"LR Scheduler: {config['training'].get('scheduler', 'none')}")
+    
+    def _create_optimizer(self, config):
+        """
+        Create optimizer based on config.
+        
+        Args:
+            config (dict): Configuration dictionary
+            
+        Returns:
+            torch.optim.Optimizer: Configured optimizer
+        """
+        optimizer_type = config['training'].get('optimizer', 'adam').lower()
+        optimizer_params = config['training'].get('optimizer_params', {})
+        
+        if optimizer_type == 'adam':
+            betas = optimizer_params.get('betas', [0.9, 0.999])
+            eps = optimizer_params.get('eps', 1e-8)
+            
+            optimizer = torch.optim.Adam(
+                self.model.parameters(),
+                lr=self.learning_rate,
+                betas=tuple(betas),
+                eps=eps,
+                weight_decay=self.weight_decay
+            )
+        elif optimizer_type == 'sgd':
+            momentum = optimizer_params.get('momentum', 0.9)
+            nesterov = optimizer_params.get('nesterov', True)
+            
+            optimizer = torch.optim.SGD(
+                self.model.parameters(),
+                lr=self.learning_rate,
+                momentum=momentum,
+                nesterov=nesterov,
+                weight_decay=self.weight_decay
+            )
+        else:
+            raise ValueError(f"Unsupported optimizer type: {optimizer_type}")
+        
+        return optimizer
+    
+    def _create_scheduler(self, config):
+        """
+        Create learning rate scheduler based on config.
+        
+        Args:
+            config (dict): Configuration dictionary
+            
+        Returns:
+            torch.optim.lr_scheduler._LRScheduler or None: Configured scheduler
+        """
+        scheduler_type = config['training'].get('scheduler', 'cosine').lower()
+        scheduler_params = config['training'].get('scheduler_params', {})
+        
+        if scheduler_type == 'cosine':
+            # T_max should be >= total epochs to avoid LR cycling
+            # If T_max is None or not set, use epochs value
+            t_max = scheduler_params.get('T_max')
+            if t_max is None:
+                t_max = self.epochs
+                self.logger.info(f"T_max not set, using epochs value: {t_max}")
+            
+            if t_max < self.epochs:
+                self.logger.warning(
+                    f"T_max ({t_max}) is less than epochs ({self.epochs}). "
+                    f"This will cause LR to cycle and may degrade performance."
+                )
+            
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=t_max
+            )
+        elif scheduler_type == 'step':
+            step_size = scheduler_params.get('step_size', 30)
+            gamma = scheduler_params.get('gamma', 0.1)
+            
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                self.optimizer,
+                step_size=step_size,
+                gamma=gamma
+            )
+        elif scheduler_type == 'none':
+            scheduler = None
+        else:
+            raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
+        
+        return scheduler
     
     def _resume_from_checkpoint(self, checkpoint_path):
         """Resume training from a checkpoint."""

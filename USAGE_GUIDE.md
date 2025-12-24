@@ -98,6 +98,32 @@ python main.py train --config config/default.yaml --early-stopping false
 
 When enabled, training will stop early if validation loss doesn't improve for `patience` epochs (configured in the config file).
 
+### Optimizer and Scheduler Configuration
+
+Configure optimizer and learning rate scheduler via CLI:
+
+```bash
+# Use SGD optimizer instead of Adam
+python main.py train \
+    --config config/default.yaml \
+    --optimizer sgd \
+    --learning-rate 0.01 \
+    --weight-decay 0.0001
+
+# Use step scheduler instead of cosine
+python main.py train \
+    --config config/default.yaml \
+    --optimizer adam \
+    --scheduler step
+
+# Disable scheduler (constant learning rate)
+python main.py train \
+    --config config/default.yaml \
+    --scheduler none
+```
+
+**Important Note about Cosine Scheduler**: When using cosine annealing, ensure `T_max >= total_epochs`. The default config sets `T_max: null` which automatically uses the epochs value. If you're resuming training or extending epochs, make sure T_max is adjusted accordingly to avoid learning rate cycling that can cause loss degradation.
+
 ### Resume Training
 
 Resume from a checkpoint:
@@ -295,11 +321,25 @@ noise:
 training:
   loss_type: "omega_hat"  # Loss function
   epochs: 100
+  
+  # Optimizer configuration
+  optimizer: "adam"      # "adam" or "sgd"
+  optimizer_params:
+    betas: [0.9, 0.999]  # For Adam
+    eps: 1.0e-8
+    momentum: 0.9        # For SGD
+    nesterov: true
+  
   learning_rate: 0.001
   weight_decay: 0.0
-  scheduler: "cosine"    # LR scheduler
+  
+  # LR scheduler
+  scheduler: "cosine"    # "cosine", "step", or "none"
   scheduler_params:
-    T_max: 100
+    T_max: null          # Auto-set to epochs (IMPORTANT: must be >= epochs)
+    step_size: 30        # For step scheduler
+    gamma: 0.1
+  
   early_stopping: true
   patience: 10
 
@@ -359,11 +399,22 @@ For mathematical details and transformation formulas, see [MATHEMATICAL_BACKGROU
 - `log_uniform`: Uniform in log-space (more samples at low sigma)
 - `select_batch`: Sample from pre-filtered values
 
+#### Optimizers
+
+- `adam`: Adam optimizer (recommended for most cases)
+  - Parameters: `betas`, `eps`
+- `sgd`: Stochastic Gradient Descent
+  - Parameters: `momentum`, `nesterov`
+
 #### Learning Rate Schedulers
 
 - `cosine`: Cosine annealing (recommended)
-- `step`: Step decay
-- `none`: No scheduler
+  - **IMPORTANT**: `T_max` should be >= total epochs to avoid LR cycling
+  - Set `T_max: null` to auto-use epochs value
+  - If T_max < epochs, LR will restart and increase, causing loss degradation
+- `step`: Step decay at fixed intervals
+  - Parameters: `step_size`, `gamma`
+- `none`: No scheduler (constant learning rate)
 
 ## Advanced Usage
 
@@ -483,6 +534,26 @@ python main.py train --config config/default.yaml --num-workers 8
 - Try different loss functions
 - Check noise sampling range (sigma_min, sigma_max)
 - Increase batch size
+
+#### Loss Increasing After Initial Decrease (LR Cycling Issue)
+
+If your loss decreases initially but then starts increasing after a certain epoch (e.g., epoch 100), this is likely due to learning rate cycling in the cosine scheduler:
+
+**Problem**: When `T_max < total_epochs`, the cosine scheduler completes a full cycle and the learning rate starts increasing again, causing loss degradation.
+
+**Solution**:
+1. Set `T_max: null` in your config to auto-use epochs value
+2. Or manually set `T_max` >= your total training epochs
+3. Check your training logs for the warning: "T_max is less than epochs"
+
+Example fix in `config/default.yaml`:
+```yaml
+training:
+  epochs: 200
+  scheduler: "cosine"
+  scheduler_params:
+    T_max: null  # Will automatically use 200
+```
 
 #### Model Not Learning
 

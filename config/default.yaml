@@ -19,11 +19,30 @@ training:
                           #          "sigma_relative", "sigma_calibrated", "omega_chi_zscore"
   sigma_cal: 0.0  # Calibration parameter for sigma_calibrated loss
   epochs: 100
+  
+  # Optimizer configuration
+  optimizer: "adam"  # Options: "adam", "sgd"
+  optimizer_params:
+    # Adam parameters
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    # SGD parameters
+    momentum: 0.9
+    nesterov: true
+  
   learning_rate: 0.001
   weight_decay: 0.0
+  
+  # Learning rate scheduler configuration
   scheduler: "cosine"  # Options: "cosine", "step", "none"
   scheduler_params:
-    T_max: 100
+    # For cosine scheduler: T_max should be >= total epochs to avoid LR cycling
+    # Set to null to automatically use the epochs value
+    T_max: null  # Will default to epochs if null
+    # For step scheduler
+    step_size: 30
+    gamma: 0.1
+  
   early_stopping: true
   patience: 10  # Number of epochs to wait before early stopping
 
