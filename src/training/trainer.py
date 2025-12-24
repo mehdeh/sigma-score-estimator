@@ -13,8 +13,10 @@ from ..utils import (
     setup_logger,
     MetricsLogger,
     plot_loss_curves,
+    plot_predictions_scatter,
 )
 from .loss_functions import LossFactory
+from .output_transforms import TransformFactory
 
 
 class OmegaTrainer:
@@ -79,6 +81,14 @@ class OmegaTrainer:
         sigma_cal = config['training'].get('sigma_cal', 0.0)
         self.loss_fn = LossFactory.get_loss(
             config['training']['loss_type'],
+            image_dim=image_dim,
+            sigma_cal=sigma_cal
+        )
+        self.image_dim = image_dim
+        
+        # Initialize output transform for evaluation
+        self.output_transform = TransformFactory.get_transform(
+            loss_type=config['training']['loss_type'],
             image_dim=image_dim,
             sigma_cal=sigma_cal
         )
@@ -442,10 +452,153 @@ class OmegaTrainer:
         best_epoch, best_val_loss = self.metrics_logger.get_best_epoch()
         self.logger.info(f"Best validation loss: {best_val_loss:.6f} at epoch {best_epoch}")
         
+        # Generate scatter plots for final training evaluation
+        self.logger.info("Generating training evaluation plots...")
+        self._generate_evaluation_plots()
+        
         return {
             'train_losses': self.train_losses,
             'val_losses': self.val_losses,
             'best_epoch': best_epoch,
             'best_val_loss': best_val_loss,
         }
+    
+    def _compute_omega_hat_target(self, clean_images, noisy_images, sigma):
+        """
+        Compute ground truth omega_hat for evaluation.
+        
+        Computes: ω̂_target = ||x - x̃||² / σ³
+        
+        This is mathematically equivalent to: ||ε||² / σ
+        where ε = (x̃ - x) / σ
+        
+        Args:
+            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
+            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
+            sigma (Tensor): Noise levels, shape (batch_size,)
+        
+        Returns:
+            Tensor: Ground truth omega_hat = ||x - x̃||² / σ³
+        """
+        batch_size = clean_images.size(0)
+        
+        # Flatten images
+        clean_flat = clean_images.view(batch_size, -1)
+        noisy_flat = noisy_images.view(batch_size, -1)
+        
+        # Ensure sigma is 1D
+        if sigma.dim() > 1:
+            sigma = sigma.squeeze()
+        
+        # Compute epsilon = (x_tilde - x) / sigma
+        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
+        
+        # Compute ||epsilon||²
+        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
+        
+        # Ground truth omega_hat = ||epsilon||² / sigma
+        # This equals ||x - x̃||² / σ³
+        omega_hat_target = epsilon_norm_sq / sigma
+        
+        return omega_hat_target
+    
+    def _evaluate_dataset(self, data_loader, max_batches=None):
+        """
+        Evaluate model on a dataset and collect predictions vs targets.
+        
+        Args:
+            data_loader (DataLoader): Data loader to evaluate on
+            max_batches (int, optional): Maximum number of batches to evaluate
+        
+        Returns:
+            tuple: (predictions, targets) as numpy arrays
+        """
+        self.model.eval()
+        
+        all_predictions = []
+        all_targets = []
+        
+        with torch.no_grad():
+            for batch_idx, (images, _) in enumerate(data_loader):
+                if max_batches is not None and batch_idx >= max_batches:
+                    break
+                
+                images = images.to(self.device)
+                
+                # Generate noise levels
+                sigma = self.noise_generator.generate_sigma(images.size(0))
+                
+                # Add noise to images
+                noisy_images, _ = self.noise_generator.add_noise(images, sigma)
+                
+                # Forward pass
+                if self.model_type == 'omega_x':
+                    output = self.model(noisy_images)
+                else:  # omega_x_sigma
+                    output = self.model(noisy_images, sigma)
+                
+                # Apply output transformation to get omega_hat
+                omega_hat = self.output_transform.apply(output, sigma=sigma)
+                
+                # Compute target omega_hat using the correct formula
+                target = self._compute_omega_hat_target(images, noisy_images, sigma)
+                
+                # Store results
+                all_predictions.append(omega_hat.squeeze().cpu())
+                all_targets.append(target.cpu())
+        
+        # Concatenate and convert to numpy
+        predictions = torch.cat(all_predictions).numpy()
+        targets = torch.cat(all_targets).numpy()
+        
+        return predictions, targets
+    
+    def _generate_evaluation_plots(self):
+        """
+        Generate scatter plots for training and validation data.
+        
+        Creates scatter plots showing model predictions vs ground truth omega_hat
+        for both training and validation datasets.
+        """
+        try:
+            # Evaluate on training data (use subset to save time)
+            self.logger.info("Evaluating on training data...")
+            train_predictions, train_targets = self._evaluate_dataset(
+                self.train_loader, 
+                max_batches=50  # Evaluate on first 50 batches
+            )
+            
+            # Generate training scatter plot
+            train_scatter_path = os.path.join(self.exp_dir, 'train_scatter_predictions.png')
+            plot_predictions_scatter(
+                train_predictions,
+                train_targets,
+                save_path=train_scatter_path,
+                show=False,
+                title='Training: Model Predictions vs Ground Truth ω̂'
+            )
+            self.logger.info(f"Training scatter plot saved to {train_scatter_path}")
+            
+            # Evaluate on validation data
+            self.logger.info("Evaluating on validation data...")
+            val_predictions, val_targets = self._evaluate_dataset(
+                self.val_loader,
+                max_batches=None  # Evaluate on full validation set
+            )
+            
+            # Generate validation scatter plot
+            val_scatter_path = os.path.join(self.exp_dir, 'val_scatter_predictions.png')
+            plot_predictions_scatter(
+                val_predictions,
+                val_targets,
+                save_path=val_scatter_path,
+                show=False,
+                title='Validation: Model Predictions vs Ground Truth ω̂'
+            )
+            self.logger.info(f"Validation scatter plot saved to {val_scatter_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Error generating evaluation plots: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 

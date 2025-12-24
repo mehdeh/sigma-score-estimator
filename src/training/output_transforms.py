@@ -1,10 +1,23 @@
 """
 Output transformation module for omega estimator models.
 
-This module provides transformations to convert model outputs to omega_hat
-during inference. The transformations are applied AFTER training, not during
-loss computation.
+This module provides transformations to convert model outputs to omega_hat (ω̂)
+during inference and evaluation. The transformations are applied AFTER training,
+not during loss computation.
 
+Evaluation Target Formula:
+--------------------------
+All models are evaluated using: ω̂_target = ||x - x̃||² / σ³
+where:
+  - x: clean image
+  - x̃: noisy image
+  - σ: noise level
+
+This is mathematically equivalent to: ω̂_target = ||ε||² / σ
+where ε = (x̃ - x) / σ
+
+Output Transformations:
+-----------------------
 For loss types 1-4: No transformation (model outputs omega_hat directly)
 For loss types 5-8: Transform sigma estimates to omega_hat
 For loss type 9: Transform chi-squared z-score to omega_hat

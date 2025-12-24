@@ -13,7 +13,8 @@ This document provides the complete mathematical foundation for estimating the *
 5. [Corrected Objective Function](#corrected-objective-function)
 6. [Loss Function Formulations](#loss-function-formulations)
 7. [Implementation Notes](#implementation-notes)
-8. [References](#references)
+8. [Model Evaluation](#8-model-evaluation)
+9. [References](#references)
 
 ---
 
@@ -585,6 +586,62 @@ This separation ensures:
 [5] Vincent, P. (2011). A Connection Between Score Matching and Denoising Autoencoders. *Neural Computation*, 23(7), 1661-1674.
 
 [6] Hyvärinen, A., & Dayan, P. (2005). Estimation of Non-Normalized Statistical Models by Score Matching. *Journal of Machine Learning Research*, 6, 695-709.
+
+---
+
+## 8. Model Evaluation
+
+### 8.1 Evaluation Formula
+
+All models are evaluated using a consistent metric in $\hat{\omega}$ space, regardless of which loss function was used during training. The ground truth target for evaluation is computed as:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3}
+$$
+
+where:
+- $\mathbf{x}$ is the clean image
+- $\tilde{\mathbf{x}}$ is the noisy image ($\tilde{\mathbf{x}} = \mathbf{x} + \sigma \epsilon$, where $\epsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$)
+- $\sigma$ is the noise level
+
+### 8.2 Mathematical Equivalence
+
+This formula is mathematically equivalent to:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert\epsilon\rVert_2^2}{\sigma}
+$$
+
+where $\epsilon = \frac{\tilde{\mathbf{x}} - \mathbf{x}}{\sigma}$
+
+**Proof**:
+$$
+\frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3} = \frac{\lVert\tilde{\mathbf{x}} - \mathbf{x}\rVert_2^2}{\sigma^3} = \frac{\lVert\sigma \epsilon\rVert_2^2}{\sigma^3} = \frac{\sigma^2 \lVert\epsilon\rVert_2^2}{\sigma^3} = \frac{\lVert\epsilon\rVert_2^2}{\sigma}
+$$
+
+### 8.3 Output Transformations
+
+Models trained with different loss functions may output different quantities during training. During evaluation, these outputs are transformed to $\hat{\omega}$ space:
+
+- **Loss Types 1-4** (omega_hat, omega_epsilon, omega_chi_approx, omega_chi_mean): Model outputs $\hat{\omega}$ directly, no transformation needed
+- **Loss Types 5-7** (sigma_direct, sigma_normalized, sigma_relative): Model outputs $\sigma$ estimate, transform: $\hat{\omega} = d / \sigma$
+- **Loss Type 8** (sigma_calibrated): Model outputs $(\sigma_{\text{cal}} - \sigma)$, transform: $\hat{\omega} = d / (\sigma_{\text{cal}} - \text{output})$
+- **Loss Type 9** (omega_chi_zscore): Model outputs z-score, transform: $\hat{\omega} = (\text{output} \cdot \sqrt{2d} + d) / \sigma$
+
+where $d$ is the dimensionality of the input (e.g., $d = 3 \times 32 \times 32 = 3072$ for CIFAR-10).
+
+### 8.4 Evaluation Visualizations
+
+The evaluation process generates scatter plots showing:
+- **X-axis**: Ground truth $\hat{\omega}_{\text{target}} = \lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2 / \sigma^3$
+- **Y-axis**: Model prediction $\hat{\omega}$ (after applying appropriate output transformation)
+
+These plots are generated for:
+1. **Training data** (`train_scatter_predictions.png`) - Generated at the end of training
+2. **Validation data** (`val_scatter_predictions.png`) - Generated at the end of training
+3. **Test data** (`test_scatter_predictions.png`) - Generated during evaluation
+
+Perfect predictions lie on the diagonal line $y = x$.
 
 ---
 

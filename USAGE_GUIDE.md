@@ -178,20 +178,48 @@ experiments/test/exp_YYYYMMDD_HHMMSS/
 ├── config.yaml              # Test configuration
 ├── test.log                 # Test logs
 ├── test_metrics.json        # Evaluation metrics
-├── test_scatter_predictions.png    # Predictions vs targets
+├── test_scatter_predictions.png    # Predictions vs targets (ω̂ scatter plot)
 ├── test_noise_distribution.png     # Noise level distribution
 └── test_sample_images.png          # Sample clean/noisy images
 ```
 
+### Training Output Plots
+
+After training completes, the following additional plots are generated:
+
+```
+experiments/train/exp_YYYYMMDD_HHMMSS/
+├── ...
+├── train_scatter_predictions.png   # Training data: ω̂ predictions vs targets
+├── val_scatter_predictions.png     # Validation data: ω̂ predictions vs targets
+└── loss_curve.png                  # Training/validation loss curves
+```
+
 ### Interpretation of Metrics
 
-The test output includes:
+The evaluation metrics include:
 
 - **MSE**: Mean Squared Error between predictions and targets
 - **MAE**: Mean Absolute Error
 - **R² Score**: Coefficient of determination (1.0 is perfect)
 - **Mean Relative Error**: Average |prediction - target| / |target|
 - **Median Relative Error**: Median relative error (more robust to outliers)
+
+### Understanding Scatter Plots
+
+The scatter plots visualize model performance by comparing:
+
+- **X-axis (Target)**: Ground truth ω̂_target = ||x - x̃||² / σ³
+  - Where x is clean image, x̃ is noisy image, σ is noise level
+- **Y-axis (Prediction)**: Model output ω̂ after applying output transformation
+
+**What to look for:**
+- Points should cluster around the diagonal line (y = x)
+- R² score closer to 1.0 indicates better fit
+- Systematic deviations from diagonal indicate bias
+- Scatter around diagonal indicates variance in predictions
+
+The evaluation formula ω̂_target = ||x - x̃||² / σ³ is mathematically equivalent to ||ε||² / σ where ε = (x̃ - x) / σ. This provides a consistent evaluation metric across all loss types after applying appropriate output transformations.
 
 ## Using Trained Models
 

@@ -88,6 +88,14 @@ class OmegaEvaluator:
         """
         Evaluate the model on test data.
         
+        Evaluation Process:
+        1. Generate noisy images from clean test data
+        2. Get model predictions (raw outputs)
+        3. Apply output transformation to convert to ω̂
+        4. Compute ground truth ω̂_target = ||x - x̃||² / σ³
+        5. Compare predictions vs targets and compute metrics
+        6. Generate scatter plots showing ω̂ (predicted) vs ω̂_target (ground truth)
+        
         Args:
             num_samples (int, optional): Number of samples to evaluate (None for all)
             visualize (bool): Whether to generate visualizations
@@ -215,7 +223,7 @@ class OmegaEvaluator:
                 all_targets,
                 save_path=scatter_path,
                 show=False,
-                title='Model Predictions vs Ground Truth'
+                title='Test: Model Predictions vs Ground Truth ω̂'
             )
             
             # Noise distribution plot
@@ -252,6 +260,11 @@ class OmegaEvaluator:
         """
         Compute ground truth omega_hat for evaluation.
         
+        Computes: ω̂_target = ||x - x̃||² / σ³
+        
+        This is mathematically equivalent to: ||ε||² / σ
+        where ε = (x̃ - x) / σ
+        
         All evaluation metrics are computed in omega_hat space after transformation.
         This provides a consistent evaluation metric across all loss types.
         
@@ -261,7 +274,7 @@ class OmegaEvaluator:
             sigma (Tensor): Noise levels, shape (batch_size,)
         
         Returns:
-            Tensor: Ground truth omega_hat = ||epsilon||^2 / sigma
+            Tensor: Ground truth omega_hat = ||x - x̃||² / σ³
         """
         batch_size = clean_images.size(0)
         
@@ -273,13 +286,14 @@ class OmegaEvaluator:
         if sigma.dim() > 1:
             sigma = sigma.squeeze()
         
-        # Compute epsilon = (x - x_tilde) / sigma
+        # Compute epsilon = (x_tilde - x) / sigma
         epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
         
-        # Compute ||epsilon||^2
+        # Compute ||epsilon||²
         epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
         
-        # Ground truth omega_hat = ||epsilon||^2 / sigma
+        # Ground truth omega_hat = ||epsilon||² / sigma
+        # This equals ||x - x̃||² / σ³
         omega_hat_target = epsilon_norm_sq / sigma
         
         return omega_hat_target

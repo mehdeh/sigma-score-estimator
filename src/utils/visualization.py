@@ -83,9 +83,13 @@ def plot_predictions_scatter(predictions, targets, save_path=None, show=False, t
     """
     Create a scatter plot comparing predictions to targets.
     
+    For omega estimation, this plots:
+    - X-axis (Target): ω̂_target = ||x - x̃||² / σ³ (ground truth)
+    - Y-axis (Prediction): ω̂ from model output after transformation
+    
     Args:
-        predictions (array-like): Model predictions
-        targets (array-like): Ground truth targets
+        predictions (array-like): Model predictions (ω̂)
+        targets (array-like): Ground truth targets (ω̂_target)
         save_path (str, optional): Path to save the plot
         show (bool): Whether to display the plot
         title (str): Plot title
@@ -110,18 +114,21 @@ def plot_predictions_scatter(predictions, targets, save_path=None, show=False, t
     max_val = max(targets.max(), predictions.max())
     plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
     
-    plt.xlabel('Target', fontsize=12)
-    plt.ylabel('Prediction', fontsize=12)
+    plt.xlabel('Target ω̂ = ||x - x̃||² / σ³', fontsize=12)
+    plt.ylabel('Predicted ω̂ (Model Output)', fontsize=12)
     plt.title(title, fontsize=14)
     plt.legend(fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.axis('equal')
     
-    # Add R^2 score
-    from sklearn.metrics import r2_score
+    # Add R^2 score and sample count
+    from sklearn.metrics import r2_score, mean_absolute_error
     r2 = r2_score(targets, predictions)
-    plt.text(0.05, 0.95, f'R² = {r2:.4f}', transform=plt.gca().transAxes,
-             fontsize=12, verticalalignment='top',
+    mae = mean_absolute_error(targets, predictions)
+    
+    stats_text = f'R² = {r2:.4f}\nMAE = {mae:.4f}\nN = {len(targets)}'
+    plt.text(0.05, 0.95, stats_text, transform=plt.gca().transAxes,
+             fontsize=11, verticalalignment='top',
              bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
