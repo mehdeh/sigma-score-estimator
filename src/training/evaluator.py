@@ -51,6 +51,7 @@ class OmegaEvaluator:
         
         # Extract config parameters
         self.model_type = config['model']['type']
+        self.loss_type = config['training']['loss_type']
         
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
@@ -64,14 +65,14 @@ class OmegaEvaluator:
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
         self.loss_fn = LossFactory.get_loss(
-            config['training']['loss_type'],
+            self.loss_type,
             image_dim=image_dim
         )
         self.image_dim = image_dim
         
         # Initialize output transform
         self.output_transform = TransformFactory.get_transform(
-            loss_type=config['training']['loss_type'],
+            loss_type=self.loss_type,
             image_dim=image_dim
         )
         
@@ -107,6 +108,8 @@ class OmegaEvaluator:
         all_targets = []
         all_sigmas = []
         all_losses = []
+        all_raw_predictions = []
+        all_raw_targets = []
         
         # For visualization
         sample_clean_images = []
@@ -137,6 +140,9 @@ class OmegaEvaluator:
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
                 
+                # Store raw output (before transformation)
+                all_raw_predictions.append(output.squeeze().cpu())
+                
                 # Apply output transformation to get omega_hat
                 # This converts model output to omega_hat for evaluation
                 omega_hat = self.output_transform.apply(output, sigma=sigma)
@@ -144,6 +150,9 @@ class OmegaEvaluator:
                 # Compute target (ground truth omega_hat)
                 # All evaluation is done in omega_hat space
                 target = self._compute_omega_hat_target(images, noisy_images, sigma)
+                
+                # Compute raw target (in same space as raw model output)
+                raw_target = self._compute_raw_target(images, noisy_images, sigma)
                 
                 # Compute loss (for logging purposes)
                 loss = self.loss_fn(output, images, noisy_images, sigma)
@@ -153,6 +162,7 @@ class OmegaEvaluator:
                 all_targets.append(target.cpu())
                 all_sigmas.append(sigma.cpu())
                 all_losses.append(loss.item())
+                all_raw_targets.append(raw_target.cpu())
                 
                 # Store samples for visualization
                 if len(sample_clean_images) < max_vis_samples:
@@ -170,6 +180,8 @@ class OmegaEvaluator:
         all_predictions = torch.cat(all_predictions).numpy()
         all_targets = torch.cat(all_targets).numpy()
         all_sigmas = torch.cat(all_sigmas).numpy()
+        all_raw_predictions = torch.cat(all_raw_predictions).numpy()
+        all_raw_targets = torch.cat(all_raw_targets).numpy()
         
         # Compute metrics
         mse = mean_squared_error(all_targets, all_predictions)
@@ -214,14 +226,17 @@ class OmegaEvaluator:
             self.logger.info("Generating visualizations...")
             plots_dir = self.exp_dir
             
-            # Scatter plot of predictions vs targets
+            # Scatter plot of predictions vs targets (showing both before and after transformation)
             scatter_path = os.path.join(plots_dir, 'test_scatter_predictions.png')
             plot_predictions_scatter(
                 all_predictions,
                 all_targets,
                 save_path=scatter_path,
                 show=False,
-                title='Test: Model Predictions vs Ground Truth ω̂'
+                title='Test: Model Predictions vs Ground Truth ω̂',
+                raw_predictions=all_raw_predictions,
+                raw_targets=all_raw_targets,
+                loss_type=self.loss_type
             )
             
             # Error vs sigma plot
@@ -306,6 +321,49 @@ class OmegaEvaluator:
         omega_hat_target = epsilon_norm_sq / sigma
         
         return omega_hat_target
+    
+    def _compute_raw_target(self, clean_images, noisy_images, sigma):
+        """
+        Compute ground truth in the same space as raw model output (before transformation).
+        
+        For omega_chi_zscore: Computes z-score = (||ε||² - d) / sqrt(2*d)
+        For other losses: Same as omega_hat target (no transformation)
+        
+        Args:
+            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
+            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
+            sigma (Tensor): Noise levels, shape (batch_size,)
+        
+        Returns:
+            Tensor: Ground truth in raw output space
+        """
+        batch_size = clean_images.size(0)
+        
+        # Flatten images
+        clean_flat = clean_images.view(batch_size, -1)
+        noisy_flat = noisy_images.view(batch_size, -1)
+        d = clean_flat.size(1)  # Image dimensionality
+        
+        # Ensure sigma is 1D
+        if sigma.dim() > 1:
+            sigma = sigma.squeeze()
+        
+        # Compute epsilon = (x_tilde - x) / sigma
+        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
+        
+        # Compute ||epsilon||²
+        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
+        
+        # For omega_chi_zscore, compute z-score
+        if self.loss_type == 'omega_chi_zscore':
+            # z-score = (||epsilon||² - d) / sqrt(2*d)
+            sqrt_2d = torch.sqrt(torch.tensor(2.0 * d, device=epsilon_norm_sq.device))
+            raw_target = (epsilon_norm_sq - d) / sqrt_2d
+        else:
+            # For other losses, raw output is already omega_hat
+            raw_target = epsilon_norm_sq / sigma
+        
+        return raw_target
     
     def predict_batch(self, images, sigma):
         """

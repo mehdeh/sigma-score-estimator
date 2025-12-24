@@ -55,6 +55,7 @@ class OmegaTrainer:
         
         # Extract config parameters
         self.model_type = config['model']['type']
+        self.loss_type = config['training']['loss_type']
         self.epochs = config['training']['epochs']
         self.learning_rate = config['training']['learning_rate']
         self.weight_decay = config['training'].get('weight_decay', 0.0)
@@ -80,14 +81,14 @@ class OmegaTrainer:
         # Initialize loss function
         image_dim = 3 * 32 * 32  # CIFAR-10
         self.loss_fn = LossFactory.get_loss(
-            config['training']['loss_type'],
+            self.loss_type,
             image_dim=image_dim
         )
         self.image_dim = image_dim
         
         # Initialize output transform for evaluation
         self.output_transform = TransformFactory.get_transform(
-            loss_type=config['training']['loss_type'],
+            loss_type=self.loss_type,
             image_dim=image_dim
         )
         
@@ -500,6 +501,49 @@ class OmegaTrainer:
         
         return omega_hat_target
     
+    def _compute_raw_target(self, clean_images, noisy_images, sigma):
+        """
+        Compute ground truth in the same space as raw model output (before transformation).
+        
+        For omega_chi_zscore: Computes z-score = (||ε||² - d) / sqrt(2*d)
+        For other losses: Same as omega_hat target (no transformation)
+        
+        Args:
+            clean_images (Tensor): Clean images, shape (batch_size, C, H, W)
+            noisy_images (Tensor): Noisy images, shape (batch_size, C, H, W)
+            sigma (Tensor): Noise levels, shape (batch_size,)
+        
+        Returns:
+            Tensor: Ground truth in raw output space
+        """
+        batch_size = clean_images.size(0)
+        
+        # Flatten images
+        clean_flat = clean_images.view(batch_size, -1)
+        noisy_flat = noisy_images.view(batch_size, -1)
+        d = clean_flat.size(1)  # Image dimensionality
+        
+        # Ensure sigma is 1D
+        if sigma.dim() > 1:
+            sigma = sigma.squeeze()
+        
+        # Compute epsilon = (x_tilde - x) / sigma
+        epsilon = (noisy_flat - clean_flat) / sigma.view(-1, 1)
+        
+        # Compute ||epsilon||²
+        epsilon_norm_sq = torch.sum(epsilon ** 2, dim=1)
+        
+        # For omega_chi_zscore, compute z-score
+        if self.loss_type == 'omega_chi_zscore':
+            # z-score = (||epsilon||² - d) / sqrt(2*d)
+            sqrt_2d = torch.sqrt(torch.tensor(2.0 * d, device=epsilon_norm_sq.device))
+            raw_target = (epsilon_norm_sq - d) / sqrt_2d
+        else:
+            # For other losses, raw output is already omega_hat
+            raw_target = epsilon_norm_sq / sigma
+        
+        return raw_target
+    
     def _evaluate_dataset(self, data_loader, max_batches=None):
         """
         Evaluate model on a dataset and collect predictions vs targets.
@@ -509,13 +553,15 @@ class OmegaTrainer:
             max_batches (int, optional): Maximum number of batches to evaluate
         
         Returns:
-            tuple: (predictions, targets, sigmas) as numpy arrays
+            tuple: (predictions, targets, sigmas, raw_predictions, raw_targets) as numpy arrays
         """
         self.model.eval()
         
         all_predictions = []
         all_targets = []
         all_sigmas = []
+        all_raw_predictions = []
+        all_raw_targets = []
         
         with torch.no_grad():
             for batch_idx, (images, _) in enumerate(data_loader):
@@ -536,23 +582,32 @@ class OmegaTrainer:
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
                 
+                # Store raw output (before transformation)
+                all_raw_predictions.append(output.squeeze().cpu())
+                
                 # Apply output transformation to get omega_hat
                 omega_hat = self.output_transform.apply(output, sigma=sigma)
                 
                 # Compute target omega_hat using the correct formula
                 target = self._compute_omega_hat_target(images, noisy_images, sigma)
                 
+                # Compute raw target (in same space as raw model output)
+                raw_target = self._compute_raw_target(images, noisy_images, sigma)
+                
                 # Store results
                 all_predictions.append(omega_hat.squeeze().cpu())
                 all_targets.append(target.cpu())
                 all_sigmas.append(sigma.cpu())
+                all_raw_targets.append(raw_target.cpu())
         
         # Concatenate and convert to numpy
         predictions = torch.cat(all_predictions).numpy()
         targets = torch.cat(all_targets).numpy()
         sigmas = torch.cat(all_sigmas).numpy()
+        raw_predictions = torch.cat(all_raw_predictions).numpy()
+        raw_targets = torch.cat(all_raw_targets).numpy()
         
-        return predictions, targets, sigmas
+        return predictions, targets, sigmas, raw_predictions, raw_targets
     
     def _generate_evaluation_plots(self):
         """
@@ -567,19 +622,22 @@ class OmegaTrainer:
         try:
             # Evaluate on training data (use subset to save time)
             self.logger.info("Evaluating on training data...")
-            train_predictions, train_targets, train_sigmas = self._evaluate_dataset(
+            train_predictions, train_targets, train_sigmas, train_raw_predictions, train_raw_targets = self._evaluate_dataset(
                 self.train_loader, 
                 max_batches=50  # Evaluate on first 50 batches
             )
             
-            # Generate training scatter plot
+            # Generate training scatter plot (showing both before and after transformation)
             train_scatter_path = os.path.join(self.exp_dir, 'train_scatter_predictions.png')
             plot_predictions_scatter(
                 train_predictions,
                 train_targets,
                 save_path=train_scatter_path,
                 show=False,
-                title='Training: Model Predictions vs Ground Truth ω̂'
+                title='Training: Model Predictions vs Ground Truth ω̂',
+                raw_predictions=train_raw_predictions,
+                raw_targets=train_raw_targets,
+                loss_type=self.loss_type
             )
             self.logger.info(f"Training scatter plot saved to {train_scatter_path}")
             
@@ -597,19 +655,22 @@ class OmegaTrainer:
             
             # Evaluate on validation data
             self.logger.info("Evaluating on validation data...")
-            val_predictions, val_targets, val_sigmas = self._evaluate_dataset(
+            val_predictions, val_targets, val_sigmas, val_raw_predictions, val_raw_targets = self._evaluate_dataset(
                 self.val_loader,
                 max_batches=None  # Evaluate on full validation set
             )
             
-            # Generate validation scatter plot
+            # Generate validation scatter plot (showing both before and after transformation)
             val_scatter_path = os.path.join(self.exp_dir, 'val_scatter_predictions.png')
             plot_predictions_scatter(
                 val_predictions,
                 val_targets,
                 save_path=val_scatter_path,
                 show=False,
-                title='Validation: Model Predictions vs Ground Truth ω̂'
+                title='Validation: Model Predictions vs Ground Truth ω̂',
+                raw_predictions=val_raw_predictions,
+                raw_targets=val_raw_targets,
+                loss_type=self.loss_type
             )
             self.logger.info(f"Validation scatter plot saved to {val_scatter_path}")
             

@@ -79,7 +79,8 @@ def plot_loss_curves(train_losses, val_losses, save_path=None, show=False):
         plt.close()
 
 
-def plot_predictions_scatter(predictions, targets, save_path=None, show=False, title='Predictions vs Targets'):
+def plot_predictions_scatter(predictions, targets, save_path=None, show=False, title='Predictions vs Targets',
+                           raw_predictions=None, raw_targets=None, loss_type=None):
     """
     Create a scatter plot comparing predictions to targets.
     
@@ -87,15 +88,20 @@ def plot_predictions_scatter(predictions, targets, save_path=None, show=False, t
     - X-axis (Target): ω̂_target = ||x - x̃||² / σ³ (ground truth)
     - Y-axis (Prediction): ω̂ from model output after transformation
     
+    If raw_predictions and raw_targets are provided, creates two subplots:
+    - Left: Before transformation (raw model output space)
+    - Right: After transformation (omega_hat space)
+    
     Args:
-        predictions (array-like): Model predictions (ω̂)
-        targets (array-like): Ground truth targets (ω̂_target)
+        predictions (array-like): Model predictions (ω̂) after transformation
+        targets (array-like): Ground truth targets (ω̂_target) after transformation
         save_path (str, optional): Path to save the plot
         show (bool): Whether to display the plot
         title (str): Plot title
+        raw_predictions (array-like, optional): Model predictions before transformation
+        raw_targets (array-like, optional): Ground truth targets before transformation
+        loss_type (str, optional): Loss type for labeling raw output space
     """
-    plt.figure(figsize=(8, 8))
-    
     # Convert to numpy if needed
     if isinstance(predictions, torch.Tensor):
         predictions = predictions.detach().cpu().numpy()
@@ -106,32 +112,114 @@ def plot_predictions_scatter(predictions, targets, save_path=None, show=False, t
     predictions = predictions.flatten()
     targets = targets.flatten()
     
-    # Create scatter plot
-    plt.scatter(targets, predictions, alpha=0.5, s=10)
+    # Determine if we should show before and after transformation
+    show_raw = (raw_predictions is not None and raw_targets is not None)
     
-    # Add perfect prediction line
-    min_val = min(targets.min(), predictions.min())
-    max_val = max(targets.max(), predictions.max())
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
-    
-    plt.xlabel('Target ω̂ = ||x - x̃||² / σ³', fontsize=12)
-    plt.ylabel('Predicted ω̂ (Model Output)', fontsize=12)
-    plt.title(title, fontsize=14)
-    plt.legend(fontsize=10)
-    plt.grid(True, alpha=0.3)
-    plt.axis('equal')
-    
-    # Add R^2 score and sample count
-    from sklearn.metrics import r2_score, mean_absolute_error
-    r2 = r2_score(targets, predictions)
-    mae = mean_absolute_error(targets, predictions)
-    
-    stats_text = f'R² = {r2:.4f}\nMAE = {mae:.4f}\nN = {len(targets)}'
-    plt.text(0.05, 0.95, stats_text, transform=plt.gca().transAxes,
-             fontsize=11, verticalalignment='top',
-             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    
-    plt.tight_layout()
+    if show_raw:
+        # Convert raw values to numpy if needed
+        if isinstance(raw_predictions, torch.Tensor):
+            raw_predictions = raw_predictions.detach().cpu().numpy()
+        if isinstance(raw_targets, torch.Tensor):
+            raw_targets = raw_targets.detach().cpu().numpy()
+        
+        raw_predictions = raw_predictions.flatten()
+        raw_targets = raw_targets.flatten()
+        
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+        
+        # Left plot: Before transformation (raw output space)
+        ax1.scatter(raw_targets, raw_predictions, alpha=0.5, s=10, color='blue')
+        
+        # Add perfect prediction line
+        min_val_raw = min(raw_targets.min(), raw_predictions.min())
+        max_val_raw = max(raw_targets.max(), raw_predictions.max())
+        ax1.plot([min_val_raw, max_val_raw], [min_val_raw, max_val_raw], 
+                'r--', linewidth=2, label='Perfect Prediction')
+        
+        # Determine raw space label based on loss type
+        if loss_type == 'omega_chi_zscore':
+            raw_label = 'z-score = (||ε||² - d) / √(2d)'
+        else:
+            raw_label = 'Raw Model Output'
+        
+        ax1.set_xlabel(f'Target ({raw_label})', fontsize=12)
+        ax1.set_ylabel(f'Predicted ({raw_label})', fontsize=12)
+        ax1.set_title('Before Transformation (Raw Model Output)', fontsize=13, fontweight='bold')
+        ax1.legend(fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        ax1.axis('equal')
+        
+        # Add R^2 score for raw predictions
+        from sklearn.metrics import r2_score, mean_absolute_error
+        r2_raw = r2_score(raw_targets, raw_predictions)
+        mae_raw = mean_absolute_error(raw_targets, raw_predictions)
+        
+        stats_text_raw = f'R² = {r2_raw:.4f}\nMAE = {mae_raw:.4f}\nN = {len(raw_targets)}'
+        ax1.text(0.05, 0.95, stats_text_raw, transform=ax1.transAxes,
+                fontsize=11, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
+        
+        # Right plot: After transformation (omega_hat space)
+        ax2.scatter(targets, predictions, alpha=0.5, s=10, color='green')
+        
+        # Add perfect prediction line
+        min_val = min(targets.min(), predictions.min())
+        max_val = max(targets.max(), predictions.max())
+        ax2.plot([min_val, max_val], [min_val, max_val], 
+                'r--', linewidth=2, label='Perfect Prediction')
+        
+        ax2.set_xlabel('Target ω̂ = ||x - x̃||² / σ³', fontsize=12)
+        ax2.set_ylabel('Predicted ω̂ (After Transformation)', fontsize=12)
+        ax2.set_title('After Transformation (ω̂ space)', fontsize=13, fontweight='bold')
+        ax2.legend(fontsize=10)
+        ax2.grid(True, alpha=0.3)
+        ax2.axis('equal')
+        
+        # Add R^2 score for transformed predictions
+        r2 = r2_score(targets, predictions)
+        mae = mean_absolute_error(targets, predictions)
+        
+        stats_text = f'R² = {r2:.4f}\nMAE = {mae:.4f}\nN = {len(targets)}'
+        ax2.text(0.05, 0.95, stats_text, transform=ax2.transAxes,
+                fontsize=11, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7))
+        
+        # Add overall title
+        fig.suptitle(title, fontsize=15, fontweight='bold', y=0.98)
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        
+    else:
+        # Single plot: Only after transformation
+        plt.figure(figsize=(8, 8))
+        
+        # Create scatter plot
+        plt.scatter(targets, predictions, alpha=0.5, s=10)
+        
+        # Add perfect prediction line
+        min_val = min(targets.min(), predictions.min())
+        max_val = max(targets.max(), predictions.max())
+        plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
+        
+        plt.xlabel('Target ω̂ = ||x - x̃||² / σ³', fontsize=12)
+        plt.ylabel('Predicted ω̂ (Model Output)', fontsize=12)
+        plt.title(title, fontsize=14)
+        plt.legend(fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.axis('equal')
+        
+        # Add R^2 score and sample count
+        from sklearn.metrics import r2_score, mean_absolute_error
+        r2 = r2_score(targets, predictions)
+        mae = mean_absolute_error(targets, predictions)
+        
+        stats_text = f'R² = {r2:.4f}\nMAE = {mae:.4f}\nN = {len(targets)}'
+        plt.text(0.05, 0.95, stats_text, transform=plt.gca().transAxes,
+                fontsize=11, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.tight_layout()
     
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
