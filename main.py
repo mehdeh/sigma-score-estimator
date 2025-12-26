@@ -50,8 +50,12 @@ def set_seed(seed):
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        # Enable cudnn benchmark for better performance with fixed input sizes
+        # This is crucial for getting good performance on high-end GPUs like A100
+        torch.backends.cudnn.benchmark = True
+        # Note: Setting deterministic=True can slow down training significantly
+        # Only enable if exact reproducibility is critical
+        torch.backends.cudnn.deterministic = False
 
 
 def train_command(args):

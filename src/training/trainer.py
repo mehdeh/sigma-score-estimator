@@ -72,6 +72,13 @@ class OmegaTrainer:
         self.log_interval = config['logging'].get('log_interval', 100)
         self.save_format = config['checkpoint'].get('save_format', 'pkl')
         
+        # Performance optimizations
+        self.use_amp = config['training'].get('use_amp', True) and torch.cuda.is_available()
+        self.use_compile = config['training'].get('use_compile', False)
+        
+        # Initialize AMP scaler for mixed precision training
+        self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+        
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
             sigma_min=config['noise']['sigma_min'],
@@ -119,12 +126,25 @@ class OmegaTrainer:
         if resume_checkpoint is not None:
             self._resume_from_checkpoint(resume_checkpoint)
         
+        # Apply torch.compile for PyTorch 2.0+ optimization (optional)
+        if self.use_compile:
+            try:
+                self.model = torch.compile(self.model)
+                self.logger.info("Model compiled with torch.compile for optimization")
+            except Exception as e:
+                self.logger.warning(f"torch.compile not available: {e}")
+                self.use_compile = False
+        
         self.logger.info(f"Initialized OmegaTrainer with model type: {self.model_type}")
         self.logger.info(f"Loss function: {config['training']['loss_type']}")
         self.logger.info(f"Noise strategy: {config['noise']['strategy']}")
         self.logger.info(f"Optimizer: {config['training'].get('optimizer', 'adam').upper()}")
         if self.scheduler is not None:
             self.logger.info(f"LR Scheduler: {config['training'].get('scheduler', 'none')}")
+        if self.use_amp:
+            self.logger.info("Automatic Mixed Precision (AMP) enabled for faster training")
+        if self.use_compile:
+            self.logger.info("Model compilation enabled")
     
     def _create_optimizer(self, config):
         """
@@ -259,7 +279,8 @@ class OmegaTrainer:
         )
         
         for batch_idx, (images, _) in enumerate(pbar):
-            images = images.to(self.device)
+            # Use non_blocking=True for async data transfer to GPU
+            images = images.to(self.device, non_blocking=True)
             
             # Generate noise levels
             sigma = self.noise_generator.generate_sigma(images.size(0))
@@ -267,21 +288,38 @@ class OmegaTrainer:
             # Add noise to images
             noisy_images, noise = self.noise_generator.add_noise(images, sigma)
             
-            # Zero gradients
-            self.optimizer.zero_grad()
+            # Zero gradients (set_to_none=True is more efficient)
+            self.optimizer.zero_grad(set_to_none=True)
             
-            # Forward pass
-            if self.model_type == 'omega_x':
-                output = self.model(noisy_images)
-            else:  # omega_x_sigma
-                output = self.model(noisy_images, sigma)
-            
-            # Compute loss
-            loss = self.loss_fn(output, images, noisy_images, sigma)
-            
-            # Backward pass
-            loss.backward()
-            self.optimizer.step()
+            # Use automatic mixed precision if enabled
+            if self.use_amp:
+                with torch.cuda.amp.autocast():
+                    # Forward pass
+                    if self.model_type == 'omega_x':
+                        output = self.model(noisy_images)
+                    else:  # omega_x_sigma
+                        output = self.model(noisy_images, sigma)
+                    
+                    # Compute loss
+                    loss = self.loss_fn(output, images, noisy_images, sigma)
+                
+                # Backward pass with gradient scaling
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                # Forward pass
+                if self.model_type == 'omega_x':
+                    output = self.model(noisy_images)
+                else:  # omega_x_sigma
+                    output = self.model(noisy_images, sigma)
+                
+                # Compute loss
+                loss = self.loss_fn(output, images, noisy_images, sigma)
+                
+                # Backward pass
+                loss.backward()
+                self.optimizer.step()
             
             # Update statistics
             running_loss += loss.item()
@@ -324,7 +362,8 @@ class OmegaTrainer:
             )
             
             for images, _ in pbar:
-                images = images.to(self.device)
+                # Use non_blocking=True for async data transfer to GPU
+                images = images.to(self.device, non_blocking=True)
                 
                 # Generate noise levels
                 sigma = self.noise_generator.generate_sigma(images.size(0))
@@ -332,14 +371,26 @@ class OmegaTrainer:
                 # Add noise to images
                 noisy_images, noise = self.noise_generator.add_noise(images, sigma)
                 
-                # Forward pass
-                if self.model_type == 'omega_x':
-                    output = self.model(noisy_images)
-                else:  # omega_x_sigma
-                    output = self.model(noisy_images, sigma)
-                
-                # Compute loss
-                loss = self.loss_fn(output, images, noisy_images, sigma)
+                # Use automatic mixed precision if enabled
+                if self.use_amp:
+                    with torch.cuda.amp.autocast():
+                        # Forward pass
+                        if self.model_type == 'omega_x':
+                            output = self.model(noisy_images)
+                        else:  # omega_x_sigma
+                            output = self.model(noisy_images, sigma)
+                        
+                        # Compute loss
+                        loss = self.loss_fn(output, images, noisy_images, sigma)
+                else:
+                    # Forward pass
+                    if self.model_type == 'omega_x':
+                        output = self.model(noisy_images)
+                    else:  # omega_x_sigma
+                        output = self.model(noisy_images, sigma)
+                    
+                    # Compute loss
+                    loss = self.loss_fn(output, images, noisy_images, sigma)
                 
                 # Update statistics
                 running_loss += loss.item()
@@ -480,7 +531,7 @@ class OmegaTrainer:
                 if max_batches is not None and batch_idx >= max_batches:
                     break
                 
-                images = images.to(self.device)
+                images = images.to(self.device, non_blocking=True)
                 
                 # Generate noise levels
                 sigma = self.noise_generator.generate_sigma(images.size(0))
@@ -488,26 +539,50 @@ class OmegaTrainer:
                 # Add noise to images
                 noisy_images, _ = self.noise_generator.add_noise(images, sigma)
                 
-                # Forward pass
-                if self.model_type == 'omega_x':
-                    output = self.model(noisy_images)
-                else:  # omega_x_sigma
-                    output = self.model(noisy_images, sigma)
-                
-                # Store raw output (before transformation)
-                all_raw_predictions.append(output.squeeze().cpu())
-                
-                # Apply output transformation to get omega_hat
-                omega_hat = self.output_transform.apply(output, sigma=sigma)
-                
-                # Compute target omega_hat using the correct formula
-                target = compute_omega_hat_target(images, noisy_images, sigma)
-                
-                # Compute raw target (in same space as raw model output)
-                raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
-                
-                # Compute loss
-                loss = self.loss_fn(output, images, noisy_images, sigma)
+                # Use automatic mixed precision if enabled
+                if self.use_amp:
+                    with torch.cuda.amp.autocast():
+                        # Forward pass
+                        if self.model_type == 'omega_x':
+                            output = self.model(noisy_images)
+                        else:  # omega_x_sigma
+                            output = self.model(noisy_images, sigma)
+                        
+                        # Store raw output (before transformation)
+                        all_raw_predictions.append(output.squeeze().cpu())
+                        
+                        # Apply output transformation to get omega_hat
+                        omega_hat = self.output_transform.apply(output, sigma=sigma)
+                        
+                        # Compute target omega_hat using the correct formula
+                        target = compute_omega_hat_target(images, noisy_images, sigma)
+                        
+                        # Compute raw target (in same space as raw model output)
+                        raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
+                        
+                        # Compute loss
+                        loss = self.loss_fn(output, images, noisy_images, sigma)
+                else:
+                    # Forward pass
+                    if self.model_type == 'omega_x':
+                        output = self.model(noisy_images)
+                    else:  # omega_x_sigma
+                        output = self.model(noisy_images, sigma)
+                    
+                    # Store raw output (before transformation)
+                    all_raw_predictions.append(output.squeeze().cpu())
+                    
+                    # Apply output transformation to get omega_hat
+                    omega_hat = self.output_transform.apply(output, sigma=sigma)
+                    
+                    # Compute target omega_hat using the correct formula
+                    target = compute_omega_hat_target(images, noisy_images, sigma)
+                    
+                    # Compute raw target (in same space as raw model output)
+                    raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
+                    
+                    # Compute loss
+                    loss = self.loss_fn(output, images, noisy_images, sigma)
                 
                 # Store results
                 all_predictions.append(omega_hat.squeeze().cpu())
