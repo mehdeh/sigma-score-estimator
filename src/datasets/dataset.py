@@ -13,7 +13,9 @@ def get_cifar10_dataloaders(
     train_val_split=(0.85, 0.10),
     test_split=0.05,
     num_workers=4,
-    data_root='./data'
+    data_root='./data',
+    persistent_workers=True,
+    prefetch_factor=2
 ):
     """
     Load CIFAR-10 dataset and create train/val/test dataloaders.
@@ -27,6 +29,8 @@ def get_cifar10_dataloaders(
         test_split (float): Ratio of data to use for final test set
         num_workers (int): Number of worker processes for data loading
         data_root (str): Root directory for downloading/storing CIFAR-10 data
+        persistent_workers (bool): Keep workers alive between epochs (faster for multiple epochs)
+        prefetch_factor (int): Number of batches to prefetch per worker
     
     Returns:
         tuple: (train_loader, val_loader, test_loader)
@@ -61,27 +65,36 @@ def get_cifar10_dataloaders(
         combined_dataset, [train_size, val_size, test_size]
     )
 
-    # Create DataLoaders
+    # Create DataLoaders with performance optimizations
+    # persistent_workers keeps workers alive between epochs (reduces overhead)
+    # prefetch_factor allows workers to load batches ahead of time
+    # pin_memory enables faster data transfer to CUDA
+    
+    dataloader_kwargs = {
+        'batch_size': batch_size,
+        'num_workers': num_workers,
+        'pin_memory': True,
+    }
+    
+    # Only use persistent_workers and prefetch_factor if num_workers > 0
+    if num_workers > 0:
+        dataloader_kwargs['persistent_workers'] = persistent_workers
+        dataloader_kwargs['prefetch_factor'] = prefetch_factor
+    
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True
+        **dataloader_kwargs
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True
+        **dataloader_kwargs
     )
     test_loader = DataLoader(
         test_dataset,
-        batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True
+        **dataloader_kwargs
     )
 
     return train_loader, val_loader, test_loader
