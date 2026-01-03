@@ -378,6 +378,7 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 | **Computational** | | | | |
 | No training | `omega_edm` | $\frac{\\|\mathbf{x} - D_{EDM}(\mathbf{x}, \sigma)\\|^2}{\sigma^3}$ | Pretrained EDM denoiser | $\nabla_\sigma \log[\sigma^d p]$ |
 | No training | `omega_expected` | $\frac{d}{\sigma}$ | Statistical expectation | $\mathbb{E}[\nabla_\sigma \log[\sigma^d p]]$ |
+| No training | `omega_hybrid` | Adaptive switching | Combines EDM + Expected | $\nabla_\sigma \log[\sigma^d p]$ |
 
 ---
 
@@ -566,6 +567,182 @@ $$
 $$
 
 This difference is a zero-mean random variable with variance $\frac{2d}{\sigma^2}$.
+
+---
+
+## Computational Method: Hybrid Estimation
+
+### Overview
+
+The `omega_hybrid` method provides an adaptive computational approach that combines the strengths of both EDM denoiser and Expected Value methods by using a sigma threshold for automatic method selection.
+
+### Mathematical Formulation
+
+**Adaptive Selection**:
+
+$$
+\hat{\omega}_{\text{hybrid}}(\mathbf{x}, \sigma) = \begin{cases}
+\frac{d}{\sigma} & \text{if } \sigma < \sigma_{\text{threshold}} \\
+\frac{\lVert\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\rVert_2^2}{\sigma^3} & \text{if } \sigma \geq \sigma_{\text{threshold}}
+\end{cases}
+$$
+
+where:
+- $\sigma_{\text{threshold}}$ is a configurable threshold (default: 1.0)
+- $d$ is the image dimensionality
+- $D_{\text{EDM}}$ is the pretrained EDM denoiser
+
+### Rationale
+
+The hybrid method leverages empirical observations about the performance characteristics of each method:
+
+**Expected Value Method** ($\frac{d}{\sigma}$):
+- **Strengths**: More accurate for **small $\sigma$** (high signal-to-noise ratio)
+- **Reason**: When noise is small, the actual noise norm $\|\epsilon\|^2$ is close to its expectation $d$
+- **Performance**: Variance $\text{Var}[\hat{\omega}] = \frac{2d}{\sigma^2}$ is low for small $\sigma$
+
+**EDM Denoiser Method** ($\frac{\|\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\|^2}{\sigma^3}$):
+- **Strengths**: More accurate for **large $\sigma$** (low signal-to-noise ratio)
+- **Reason**: EDM denoiser is trained/optimized for heavy noise scenarios
+- **Performance**: Better captures image-specific variations when noise dominates
+
+### Threshold Selection
+
+**Default Value**: $\sigma_{\text{threshold}} = 1.0$
+
+This default is based on empirical observations, but can be tuned:
+
+**Empirical Tuning Process**:
+1. Run separate evaluations with `omega_edm` and `omega_expected`
+2. Generate error vs sigma plots for both methods
+3. Identify crossover point where methods have equal error
+4. Set threshold to that crossover value
+
+**Threshold Effects**:
+- **Lower threshold** (e.g., 0.5): Uses EDM more frequently
+  - Better if EDM is very accurate
+  - Slower due to more model inference
+- **Higher threshold** (e.g., 2.0): Uses Expected Value more frequently
+  - Faster but may sacrifice accuracy for large $\sigma$
+  - Good if sigma range is mostly small
+
+### Per-Sample Adaptivity
+
+A key advantage of the hybrid method is **per-sample adaptivity**:
+
+```python
+# Example batch with mixed sigma values
+sigma_batch = [0.5, 1.2, 0.8, 2.5]
+
+# Automatic per-sample method selection:
+# Sample 0 (σ=0.5): Expected Value (< 1.0)
+# Sample 1 (σ=1.2): EDM (≥ 1.0)
+# Sample 2 (σ=0.8): Expected Value (< 1.0)
+# Sample 3 (σ=2.5): EDM (≥ 1.0)
+```
+
+This is particularly useful when:
+- Sigma distribution is wide (covers both small and large values)
+- Using non-uniform sampling strategies
+- Different samples in a batch have different noise levels
+
+### Relationship to Other Methods
+
+**Trained Methods**:
+- Learn image-dependent predictions
+- Can adapt to data distribution
+- Require hours of training
+
+**EDM Computational Method**:
+- Always uses EDM denoiser
+- Good for large $\sigma$
+- Fixed computational cost per sample
+
+**Expected Value Method**:
+- Always uses statistical expectation
+- Good for small $\sigma$
+- Very fast (no model inference)
+
+**Hybrid Method** (this approach):
+- Adaptive: uses best method per sample
+- Combines strengths of both approaches
+- Efficient: only runs EDM when beneficial
+
+### Mathematical Properties
+
+**Expected Value Region** ($\sigma < \sigma_{\text{threshold}}$):
+
+For small $\sigma$, the noise norm is concentrated around its expectation:
+
+$$
+\|\epsilon\|^2 \approx d + O(\sqrt{2d})
+$$
+
+Therefore:
+
+$$
+\frac{\|\epsilon\|^2}{\sigma} \approx \frac{d}{\sigma} + O\left(\frac{\sqrt{2d}}{\sigma}\right)
+$$
+
+The relative error is:
+
+$$
+\frac{|\hat{\omega}_{\text{true}} - \hat{\omega}_{\text{expected}}|}{|\hat{\omega}_{\text{true}}|} \approx \frac{|\|\epsilon\|^2 - d|}{d} = O\left(\frac{1}{\sqrt{d}}\right)
+$$
+
+which is small for high-dimensional images.
+
+**EDM Denoiser Region** ($\sigma \geq \sigma_{\text{threshold}}$):
+
+For large $\sigma$, the EDM denoiser $D_{\text{EDM}}(\mathbf{x}, \sigma)$ provides a better estimate of the clean image $\tilde{\mathbf{x}}$ than the simple expectation, leading to more accurate $\hat{\omega}$ computation.
+
+### Advantages and Limitations
+
+**Advantages**:
+1. **Adaptive accuracy**: Best method automatically selected per sample
+2. **Wide sigma coverage**: Accurate across full sigma range
+3. **Empirically validated**: Based on observed performance characteristics
+4. **Efficient resource usage**: Only runs EDM when beneficial
+5. **No training required**: Like other computational methods
+6. **Per-sample adaptivity**: Each sample uses optimal method
+
+**Limitations**:
+1. **Requires threshold tuning**: Default may not be optimal for all datasets
+2. **EDM dependency**: Still requires pretrained EDM model (~200MB)
+3. **Computational cost**: Higher than pure Expected Value for mixed batches
+4. **Threshold discontinuity**: Small change in $\sigma$ near threshold causes method switch
+
+**When to use**:
+- When sigma distribution spans both small and large values
+- When you've observed different methods perform better in different regions
+- For best overall computational accuracy without training
+- When you have empirical evidence about crossover point
+
+### Performance Characteristics
+
+**Computational Cost**:
+
+For a batch with $N$ samples:
+- $N_{\text{small}}$ samples with $\sigma < \sigma_{\text{threshold}}$
+- $N_{\text{large}}$ samples with $\sigma \geq \sigma_{\text{threshold}}$
+
+Cost: $O(N_{\text{large}}) \times \text{Cost}_{\text{EDM}} + O(N_{\text{small}}) \times \text{Cost}_{\text{Expected}}$
+
+Since $\text{Cost}_{\text{Expected}} \ll \text{Cost}_{\text{EDM}}$:
+
+- If most samples have small $\sigma$: Much faster than pure EDM
+- If most samples have large $\sigma$: Similar speed to pure EDM
+- If evenly mixed: Moderate speed benefit
+
+**Accuracy Profile**:
+
+Denoting error as $e(\sigma)$:
+
+$$
+e_{\text{hybrid}}(\sigma) \approx \min(e_{\text{EDM}}(\sigma), e_{\text{expected}}(\sigma))
+$$
+
+This gives the hybrid method a "best-of-both" error profile.
 
 ---
 

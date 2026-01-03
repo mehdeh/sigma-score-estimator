@@ -76,7 +76,7 @@ def train_command(args):
     
     # Check if trying to train a computational method
     loss_type = config['training'].get('loss_type', 'omega_hat')
-    computational_methods = ['omega_edm', 'omega_expected']
+    computational_methods = ['omega_edm', 'omega_expected', 'omega_hybrid']
     
     if loss_type in computational_methods:
         print("=" * 80)
@@ -93,6 +93,11 @@ def train_command(args):
             print("the statistical expectation E[||ε||²] = d. It does not require training.")
             print("\nTo evaluate using the expected value computational method, use:")
             print("  python main.py test --method omega_expected --config config/method_expected.yaml")
+        elif loss_type == 'omega_hybrid':
+            print("\nThe 'omega_hybrid' method is a computational estimator that combines")
+            print("EDM denoiser and expected value methods. It does not require training.")
+            print("\nTo evaluate using the hybrid computational method, use:")
+            print("  python main.py test --method omega_hybrid --config config/method_hybrid.yaml")
         
         print("\nFor trainable methods, use one of:")
         print("  - omega_hat")
@@ -398,7 +403,7 @@ def main():
     test_parser.add_argument('--checkpoint', type=str,
                             help='Path to model checkpoint (not required for computational methods)')
     test_parser.add_argument('--config', type=str, help='Path to config file (required for computational methods)')
-    test_parser.add_argument('--method', type=str, choices=['omega_edm', 'omega_expected'],
+    test_parser.add_argument('--method', type=str, choices=['omega_edm', 'omega_expected', 'omega_hybrid'],
                             help='Use computational method instead of trained model')
     test_parser.add_argument('--test-samples', type=int, help='Number of samples to test')
     test_parser.add_argument('--device', type=str, help='Device (cuda/cpu)')

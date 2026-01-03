@@ -24,7 +24,7 @@ from .evaluation_utils import (
     compute_evaluation_metrics,
     log_evaluation_metrics,
 )
-from ..computational import EDMOmegaEstimator, ExpectedOmegaEstimator
+from ..computational import EDMOmegaEstimator, ExpectedOmegaEstimator, HybridOmegaEstimator
 
 
 class OmegaEvaluator:
@@ -59,7 +59,7 @@ class OmegaEvaluator:
         self.loss_type = config['training']['loss_type']
         
         # Check if this is a computational method
-        self.is_computational = (self.loss_type in ['omega_edm', 'omega_expected'])
+        self.is_computational = (self.loss_type in ['omega_edm', 'omega_expected', 'omega_hybrid'])
         
         if self.is_computational:
             # For computational methods, initialize appropriate estimator
@@ -75,6 +75,19 @@ class OmegaEvaluator:
                 self.model = ExpectedOmegaEstimator(image_dim=image_dim, device=device)
                 self.logger_name = 'ExpectedOmegaEvaluator'
                 self.computational_info = f"Expected value method: d={image_dim}"
+            elif self.loss_type == 'omega_hybrid':
+                # Hybrid computational method
+                image_dim = 3 * 32 * 32  # CIFAR-10
+                sigma_threshold = config['model'].get('sigma_threshold', 1.0)
+                edm_model_name = config['model'].get('edm_model_name', 'cifar10-uncond-ve')
+                self.model = HybridOmegaEstimator(
+                    sigma_threshold=sigma_threshold,
+                    edm_model_name=edm_model_name,
+                    image_dim=image_dim,
+                    device=device
+                )
+                self.logger_name = 'HybridOmegaEvaluator'
+                self.computational_info = f"Hybrid method: threshold={sigma_threshold}, EDM={edm_model_name}"
             
             self.model.eval()
         else:

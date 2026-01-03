@@ -1,0 +1,94 @@
+# Configuration for Hybrid Computational Method
+# 
+# This configuration is for the omega_hybrid computational method which combines
+# EDM denoiser and Expected Value methods using a sigma threshold.
+#
+# The method adaptively selects:
+#   - For σ < sigma_threshold: ω̂ = d / σ (Expected Value method)
+#   - For σ ≥ sigma_threshold: ω̂ = ||x - D_EDM(x,σ)||² / σ³ (EDM method)
+#
+# Rationale:
+# - Expected Value method is more accurate for small σ (high SNR)
+# - EDM denoiser method is more accurate for large σ (low SNR)
+# - Hybrid combines the best of both approaches
+
+# Model configuration
+model:
+  type: "omega_hybrid"  # Hybrid computational method (no training required)
+  sigma_threshold: 1.0  # Threshold for method switching
+  edm_model_name: "cifar10-uncond-ve"  # Pretrained EDM model for large sigma
+  image_dim: 3072  # Image dimensionality (3×32×32 for CIFAR-10)
+  
+  # Threshold Selection Guidelines:
+  # - Default: 1.0 works well for most cases
+  # - Lower (e.g., 0.5): Use EDM more often
+  # - Higher (e.g., 2.0): Use Expected Value more often
+  # - Empirically determined based on your observations
+  
+  # Available EDM models:
+  #   - cifar10-uncond-vp: Unconditional CIFAR-10, VP parameterization
+  #   - cifar10-uncond-ve: Unconditional CIFAR-10, VE parameterization (recommended)
+  #   - cifar10-cond-vp: Conditional CIFAR-10, VP parameterization
+  #   - cifar10-cond-ve: Conditional CIFAR-10, VE parameterization
+
+# Training configuration (not used for computational methods, but kept for compatibility)
+training:
+  loss_type: "omega_hybrid"  # Indicates hybrid computational method
+
+# Noise generation configuration
+noise:
+  sigma_min: 0.01  # Minimum noise level
+  sigma_max: 10.0  # Maximum noise level
+  strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
+  num_samples: 100  # Number of pre-filtered samples for select_batch strategy
+
+# Data configuration
+data:
+  batch_size: 128  # Batch size for evaluation
+  num_workers: 4  # Number of data loading workers
+  train_val_split: [0.85, 0.10]  # [train_ratio, val_ratio]
+  test_split: 0.05
+  data_root: "./data"
+
+# Device and seed
+device: "cuda"  # Options: "cuda", "cpu"
+seed: 42
+
+# Notes:
+# - This method does NOT require training
+# - Automatically selects method per sample based on sigma
+# - EDM model will be downloaded on first use (~200MB)
+# - Per-sample adaptive: Each sample in a batch can use a different method
+# - Combines advantages of both EDM and Expected Value approaches
+#
+# How it works:
+# 1. For each sample, check if σ < sigma_threshold
+# 2. If yes: Use fast Expected Value computation (d/σ)
+# 3. If no: Use EDM denoiser for better accuracy
+# 4. Combine results maintaining batch order
+#
+# Performance characteristics:
+# - Speed: Between EDM (slower) and Expected (faster)
+# - Accuracy: Better than either method alone in their weak regions
+# - Memory: Same as EDM (EDM model needs to be loaded)
+#
+# Tuning the threshold:
+# - Run experiments with both omega_edm and omega_expected separately
+# - Analyze error vs sigma plots to find crossover point
+# - Set sigma_threshold to that crossover value
+# - Default of 1.0 is a reasonable starting point
+#
+# Usage:
+#   python main.py test --method omega_hybrid --config config/method_hybrid.yaml
+#   python main.py test --method omega_hybrid --config config/method_hybrid.yaml --test-samples 1000
+#
+# Comparison with other methods:
+# - omega_hat (trained): Best overall, but requires training
+# - omega_edm: Good for large σ, pretrained model required
+# - omega_expected: Good for small σ, no model required, very fast
+# - omega_hybrid (this): Adaptive best-of-both, pretrained model required
+#   * Better than omega_edm for small σ
+#   * Better than omega_expected for large σ
+#   * Automatically adapts to σ distribution
+
+

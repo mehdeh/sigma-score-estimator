@@ -303,16 +303,90 @@ data:
 
 ---
 
+### Hybrid Omega Estimation
+
+The `omega_hybrid` method combines the best of both EDM and Expected Value methods using adaptive sigma-based switching:
+
+**Key Features:**
+- Adaptive method selection based on sigma threshold
+- For $\sigma < \text{threshold}$: Uses Expected Value ($\frac{d}{\sigma}$)
+- For $\sigma \geq \text{threshold}$: Uses EDM denoiser ($\frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$)
+- Best of both worlds: accurate across all sigma ranges
+- Per-sample adaptive: each sample can use a different method
+
+### Basic Hybrid Method Usage
+
+```bash
+# Evaluate using Hybrid computational method
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml
+```
+
+### Hybrid Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
+    --test-samples 2000
+
+# Use specific device
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
+    --device cuda
+```
+
+### Hybrid Configuration
+
+The Hybrid method uses `config/method_hybrid.yaml`:
+
+```yaml
+model:
+  type: "omega_hybrid"
+  sigma_threshold: 1.0  # Threshold for method switching
+  edm_model_name: "cifar10-uncond-ve"  # For large sigma
+  image_dim: 3072  # For small sigma
+  
+training:
+  loss_type: "omega_hybrid"  # Indicates hybrid computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Tuning the Threshold:**
+- Default: 1.0 (reasonable starting point)
+- Based on empirical observation: use error vs sigma plots
+- Lower threshold: Use EDM more often
+- Higher threshold: Use Expected Value more often
+
+**Rationale:**
+- Expected Value works better for small $\sigma$ (high SNR)
+- EDM denoiser works better for large $\sigma$ (low SNR)
+- Hybrid automatically selects the best method per sample
+
+---
+
 ### Comparison: Trained vs Computational Methods
 
-| Aspect | Trained Models | EDM Method | Expected Value Method |
-|--------|---------------|------------|----------------------|
-| Training Required | Yes (hours) | No | No |
-| Pretrained Model | Not needed | EDM (~200MB) | Not needed |
-| Model Inference | Yes | Yes (EDM) | No |
-| Accuracy | High (trained) | Good (EDM quality) | Baseline (expected value) |
-| Speed (after setup) | Fast | Fast | Extremely fast |
-| Use Case | Best accuracy | Quick evaluation | Theoretical baseline |
+| Aspect | Trained Models | EDM Method | Expected Value | Hybrid Method |
+|--------|---------------|------------|----------------|---------------|
+| Training Required | Yes (hours) | No | No | No |
+| Pretrained Model | Not needed | EDM (~200MB) | Not needed | EDM (~200MB) |
+| Model Inference | Yes | Yes (EDM) | No | Yes (adaptive) |
+| Accuracy | High (trained) | Good (large σ) | Good (small σ) | Best overall |
+| Speed (after setup) | Fast | Fast | Extremely fast | Fast |
+| Adaptivity | No | No | No | Yes (σ-based) |
+| Use Case | Best accuracy | Quick eval | Baseline | Best computational |
 
 ### EDM Method Output
 

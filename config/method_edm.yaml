@@ -22,7 +22,7 @@ training:
 
 # Noise generation configuration
 noise:
-  sigma_min: 1.0  # Minimum noise level
+  sigma_min: 0.01  # Minimum noise level
   sigma_max: 10.0  # Maximum noise level
   strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
   num_samples: 100  # Number of pre-filtered samples for select_batch strategy

@@ -11,13 +11,16 @@ Available Methods:
 -----------------
 - EDMOmegaEstimator: Uses pretrained EDM denoiser to compute ||x - x̃||² / σ³
 - ExpectedOmegaEstimator: Uses statistical expectation to compute d / σ
+- HybridOmegaEstimator: Combines both methods with sigma threshold switching
 """
 
 from .edm_estimator import EDMOmegaEstimator
 from .expected_estimator import ExpectedOmegaEstimator
+from .hybrid_estimator import HybridOmegaEstimator
 
 __all__ = [
     'EDMOmegaEstimator',
     'ExpectedOmegaEstimator',
+    'HybridOmegaEstimator',
 ]
 

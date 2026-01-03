@@ -13,6 +13,7 @@ This repository implements deep learning models that estimate the gradient of lo
   - **Computational Methods** (no training required):
     - `omega_edm`: Uses pretrained EDM denoiser
     - `omega_expected`: Uses statistical expectation
+    - `omega_hybrid`: Adaptive combination of both methods
 - **Practical Implementation**: Multiple loss formulations enabling better control over noise scheduling in diffusion models
 
 ### Key Features
@@ -34,6 +35,10 @@ This repository implements deep learning models that estimate the gradient of lo
       - Based on $\mathbb{E}[\|\epsilon\|^2] = d$ for $\epsilon \sim \mathcal{N}(0, \mathbf{I})$
       - Extremely fast (no model inference)
       - Perfect baseline for theoretical comparisons
+    - `omega_hybrid`: Adaptive hybrid combining both EDM and Expected Value
+      - For $\sigma < \text{threshold}$: uses Expected Value ($\frac{d}{\sigma}$)
+      - For $\sigma \geq \text{threshold}$: uses EDM denoiser
+      - Best of both worlds: accurate across all sigma ranges
   - All formulations derived from score matching principles
   - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for complete derivations
   
@@ -104,10 +109,15 @@ python main.py test \
     --method omega_expected \
     --config config/method_expected.yaml
 
+# Test using Hybrid computational method (adaptive, best of both)
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml
+
 # Evaluate with custom parameters
 python main.py test \
-    --method omega_expected \
-    --config config/method_expected.yaml \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
     --test-samples 2000 \
     --device cuda
 ```
@@ -130,7 +140,8 @@ sigma-score-estimator/
 │   ├── model_x.yaml            # Config for omega(x)
 │   ├── model_x_sigma.yaml      # Config for omega(x,sigma)
 │   ├── method_edm.yaml         # Config for EDM computational method
-│   └── method_expected.yaml    # Config for Expected Value computational method
+│   ├── method_expected.yaml    # Config for Expected Value computational method
+│   └── method_hybrid.yaml      # Config for Hybrid computational method
 ├── src/                        # Source code
 │   ├── models/                 # Model architectures (trained models)
 │   ├── computational/          # Computational methods (no training)
@@ -200,7 +211,7 @@ noise:
   
 training:
   loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_zscore
-                          # Note: omega_edm, omega_expected are computational (cannot be trained)
+                          # Note: omega_edm, omega_expected, omega_hybrid are computational (cannot be trained)
   epochs: 100
   learning_rate: 0.001
 ```
