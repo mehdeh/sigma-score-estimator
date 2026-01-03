@@ -369,11 +369,71 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 
 ### Summary Table
 
-| Loss Type | Name | Target Quantity | Key Feature | Estimates |
-|-----------|------|----------------|-------------|-----------|
-| 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Corrected formulation | $\nabla_\sigma \log[\sigma^d p]$ |
-| 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based, numerically stable | $\nabla_\sigma \log[\sigma^d p]$ |
-| 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
+| Method Type | Name | Target Quantity | Key Feature | Estimates |
+|-------------|------|----------------|-------------|-----------|
+| **Trained Models** | | | | |
+| Loss Type 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Corrected formulation | $\nabla_\sigma \log[\sigma^d p]$ |
+| Loss Type 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based, numerically stable | $\nabla_\sigma \log[\sigma^d p]$ |
+| Loss Type 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
+| **Computational** | | | | |
+| No training | `omega_edm` | $\frac{\\|\mathbf{x} - D_{EDM}(\mathbf{x}, \sigma)\\|^2}{\sigma^3}$ | Pretrained EDM denoiser | $\nabla_\sigma \log[\sigma^d p]$ |
+
+---
+
+## Computational Method: EDM-Based Estimation
+
+### Overview
+
+The `omega_edm` method provides a training-free approach to estimate $\hat{\omega}$ by leveraging a pretrained EDM (Elucidating the Design Space of Diffusion Models) denoiser.
+
+### Mathematical Formulation
+
+**Target (from Loss Type 1)**:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3}
+$$
+
+where $\tilde{\mathbf{x}}$ is the clean image.
+
+**Computational Approach**:
+
+Since we don't have access to the true clean image $\tilde{\mathbf{x}}$ during evaluation, we use the EDM denoiser to approximate it:
+
+$$
+\tilde{\mathbf{x}} \approx D_{\text{EDM}}(\mathbf{x}, \sigma)
+$$
+
+Thus, the computational estimate is:
+
+$$
+\hat{\omega}_{\text{edm}}(\mathbf{x}, \sigma) = \frac{\lVert\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\rVert_2^2}{\sigma^3}
+$$
+
+### Relationship to Trained Methods
+
+**Trained Methods**:
+- Learn to predict $\hat{\omega}$ using clean-noisy image pairs during training
+- Model: $\hat{\omega}_\theta(\mathbf{x}, \sigma) \approx \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}_{\text{true}}\rVert_2^2}{\sigma^3}$
+
+**EDM Computational Method**:
+- Uses pretrained denoiser to estimate $\tilde{\mathbf{x}}$
+- Computes $\hat{\omega}$ directly from the formula
+- No training phase required
+
+### Advantages and Limitations
+
+**Advantages**:
+1. No training required (saves hours of computation)
+2. Based on state-of-the-art pretrained EDM models
+3. Mathematically grounded in the same target formula
+4. Can serve as baseline for comparison
+
+**Limitations**:
+1. Quality depends on EDM denoiser performance
+2. Cannot adapt to specific data distributions through training
+3. Fixed capacity (cannot improve beyond EDM)
+4. Requires downloading pretrained model (~200MB)
 
 ---
 

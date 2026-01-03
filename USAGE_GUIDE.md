@@ -169,6 +169,96 @@ python main.py test \
     --test-samples 5000
 ```
 
+## Using Computational Methods (No Training Required)
+
+### EDM-Based Omega Estimation
+
+The `omega_edm` method provides a computational approach to estimate omega_hat using a pretrained EDM denoiser, without requiring any training:
+
+**Key Features:**
+- No training phase required
+- Uses pretrained EDM model from NVlabs
+- Computes: $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$ where $\tilde{\mathbf{x}}$ is from EDM denoiser
+- Fast evaluation
+- Results comparable to trained models
+
+### Basic EDM Method Usage
+
+```bash
+# Evaluate using EDM computational method
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml
+```
+
+### EDM Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml \
+    --test-samples 2000
+
+# Use different EDM model and device
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml \
+    --device cuda:0
+```
+
+### EDM Configuration
+
+The EDM method uses `config/method_edm.yaml`:
+
+```yaml
+model:
+  type: "omega_edm"
+  edm_model_name: "cifar10-uncond-ve"  # Pretrained model
+  
+training:
+  loss_type: "omega_edm"  # Indicates computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Available EDM Models:**
+- `cifar10-uncond-ve`: Unconditional, VE parameterization (recommended)
+- `cifar10-uncond-vp`: Unconditional, VP parameterization
+- `cifar10-cond-ve`: Conditional, VE parameterization
+- `cifar10-cond-vp`: Conditional, VP parameterization
+
+### Comparison: Trained vs Computational
+
+| Aspect | Trained Models | Computational (EDM) |
+|--------|---------------|---------------------|
+| Training Required | Yes (hours) | No |
+| Pretrained Model | Not needed | EDM model (~200MB) |
+| Accuracy | High (trained on data) | Good (depends on EDM) |
+| Speed (after setup) | Fast | Fast |
+| Use Case | Best accuracy | Quick evaluation |
+
+### EDM Method Output
+
+Testing with EDM method creates the same output structure:
+
+```
+experiments/test/exp_YYYYMMDD_HHMMSS/
+├── config.yaml              # Test configuration
+├── test.log                 # Test logs (shows EDM loading)
+├── test_metrics.json        # Evaluation metrics
+├── test_scatter_predictions.png    # Predictions vs targets
+├── test_error_vs_sigma.png         # Error vs noise level
+└── test_sample_images.png          # Sample images
+```
+
 ### Test Output
 
 Testing creates a test directory:

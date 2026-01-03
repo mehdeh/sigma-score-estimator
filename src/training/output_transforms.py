@@ -150,6 +150,9 @@ class TransformFactory:
         
         # Loss type 9: Chi-squared z-score
         'omega_chi_zscore': ChiZScoreTransform,
+        
+        # Computational method: EDM-based estimation (outputs omega_hat directly)
+        'omega_edm': IdentityTransform,
     }
     
     @staticmethod
@@ -210,6 +213,9 @@ def get_transform_info():
         ("", "", ""),
         ("Loss Type 9", "ChiZScoreTransform", "(output * √(2d) + d) / σ"),
         ("omega_chi_zscore", "z-score → ω", "ω = ||ε||² / σ"),
+        ("", "", ""),
+        ("Computational", "IdentityTransform", "output (no change)"),
+        ("omega_edm", "No transform", "Computational estimate"),
     ]
     
     for name, transform, formula in transform_info:

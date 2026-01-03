@@ -74,6 +74,23 @@ def train_command(args):
     # Override config with command-line arguments
     config = override_config_with_args(config, args)
     
+    # Check if trying to train a computational method
+    loss_type = config['training'].get('loss_type', 'omega_hat')
+    if loss_type == 'omega_edm':
+        print("=" * 80)
+        print("ERROR: Cannot train computational method 'omega_edm'")
+        print("=" * 80)
+        print("\nThe 'omega_edm' method is a computational estimator that uses")
+        print("a pretrained EDM denoiser. It does not require training.")
+        print("\nTo evaluate using the EDM computational method, use:")
+        print("  python main.py test --method omega_edm --config config/method_edm.yaml")
+        print("\nFor trainable methods, use one of:")
+        print("  - omega_hat")
+        print("  - omega_epsilon")
+        print("  - omega_chi_zscore")
+        print("=" * 80)
+        sys.exit(1)
+    
     # Validate configuration
     validate_config(config)
     
@@ -152,6 +169,9 @@ def test_command(args):
     print("TESTING SIGMA-SCORE-ESTIMATOR")
     print("=" * 80)
     
+    # Determine if using computational method
+    use_computational = hasattr(args, 'method') and args.method == 'omega_edm'
+    
     # Load configuration
     if args.config:
         config = load_config(args.config)
@@ -171,11 +191,21 @@ def test_command(args):
             print("Warning: No config found. Using default config.")
             from src.utils.config import create_default_config
             config = create_default_config()
+    elif use_computational:
+        # For computational methods, config is required
+        print("Error: --config is required when using computational methods (--method omega_edm)")
+        sys.exit(1)
     else:
         raise ValueError("Must provide either --config or --checkpoint")
     
     # Override config with command-line arguments
     config = override_config_with_args(config, args)
+    
+    # If method is specified, override loss_type in config
+    if use_computational:
+        config['training']['loss_type'] = 'omega_edm'
+        config['model']['type'] = 'omega_edm'
+        print(f"Using computational method: omega_edm")
     
     # Set device
     device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -208,17 +238,23 @@ def test_command(args):
     )
     print(f"Test batches: {len(test_loader)}")
     
-    # Load model
-    print(f"\nLoading model from: {args.checkpoint}")
-    
-    # Create model architecture
-    model = create_model(config['model']['type'])
-    
-    # Load checkpoint
-    model = load_model_only(args.checkpoint, model=model, device=device)
-    
-    print(f"Model loaded successfully")
-    print(f"Model type: {config['model']['type']}")
+    # Load or create model
+    if use_computational:
+        # For computational methods, model will be created by evaluator
+        print("\nUsing EDM computational estimator (no checkpoint required)")
+        model = None
+    else:
+        # Load trained model from checkpoint
+        print(f"\nLoading model from: {args.checkpoint}")
+        
+        # Create model architecture
+        model = create_model(config['model']['type'])
+        
+        # Load checkpoint
+        model = load_model_only(args.checkpoint, model=model, device=device)
+        
+        print(f"Model loaded successfully")
+        print(f"Model type: {config['model']['type']}")
     
     # Create evaluator
     print("\nInitializing evaluator...")
@@ -324,7 +360,7 @@ def main():
                              help='Model type')
     train_parser.add_argument('--loss-type', type=str, 
                              choices=['omega_hat', 'omega_epsilon', 'omega_chi_zscore'],
-                             help='Loss function type')
+                             help='Loss function type (note: omega_edm cannot be trained)')
     train_parser.add_argument('--noise-strategy', type=str,
                              choices=['uniform', 'log_uniform', 'select_batch'],
                              help='Noise sampling strategy')
@@ -345,10 +381,12 @@ def main():
     train_parser.add_argument('--early-stopping', type=str_to_bool, help='Enable/disable early stopping (true/false)')
     
     # Test command
-    test_parser = subparsers.add_parser('test', help='Test a trained model')
-    test_parser.add_argument('--checkpoint', type=str, required=True,
-                            help='Path to model checkpoint')
-    test_parser.add_argument('--config', type=str, help='Path to config file')
+    test_parser = subparsers.add_parser('test', help='Test a trained model or computational method')
+    test_parser.add_argument('--checkpoint', type=str,
+                            help='Path to model checkpoint (not required for --method omega_edm)')
+    test_parser.add_argument('--config', type=str, help='Path to config file (required for --method omega_edm)')
+    test_parser.add_argument('--method', type=str, choices=['omega_edm'],
+                            help='Use computational method instead of trained model')
     test_parser.add_argument('--test-samples', type=int, help='Number of samples to test')
     test_parser.add_argument('--device', type=str, help='Device (cuda/cpu)')
     test_parser.add_argument('--exp-dir', type=str, help='Test results directory')

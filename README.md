@@ -7,9 +7,10 @@ A modular PyTorch framework for training ResNet-based models to estimate the **n
 This repository implements deep learning models that estimate the gradient of log-probability with respect to the noise level $\sigma$. The framework provides:
 
 - **Theoretical Foundation**: Complete mathematical derivation connecting denoising models to score functions
-- **Two Estimator Types**: 
-  - $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
-  - $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
+- **Three Estimator Types**: 
+  - **Trained Models**: $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
+  - **Trained Models**: $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
+  - **Computational Method**: omega_edm using pretrained EDM denoiser (no training required)
 - **Practical Implementation**: Multiple loss formulations enabling better control over noise scheduling in diffusion models
 
 ### Key Features
@@ -18,12 +19,16 @@ This repository implements deep learning models that estimate the gradient of lo
   - $\omega_{\phi}(\mathbf{x})$: Image-only input
   - $\omega_{\phi}(\mathbf{x}, \sigma)$: Image and noise level input
 
-- **Multiple Loss Functions:**
-  - 9 different loss formulations with rigorous theoretical foundation
-  - Omega-based losses (Types 1-4, 9): Direct estimation of corrected sigma score $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$
-  - Sigma-based losses (Types 5-8): Indirect estimation via noise level prediction
+- **Multiple Estimation Methods:**
+  - **Trained Models** (3 loss functions): Require training on data
+    - `omega_hat`: Original formulation
+    - `omega_epsilon`: Epsilon-based formulation  
+    - `omega_chi_zscore`: Chi-squared z-score formulation
+  - **Computational Method** (omega_edm): No training required
+    - Uses pretrained EDM denoiser to compute $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$
+    - $\tilde{\mathbf{x}}$ is obtained from pretrained EDM model
+    - Fast evaluation without training phase
   - All formulations derived from score matching principles
-  - Output transformations applied during inference (not training) for types 5-9
   - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for complete derivations
   
 - **Flexible Noise Sampling:**
@@ -80,6 +85,22 @@ python main.py test \
     --test-samples 1000
 ```
 
+### Using Computational Method (No Training Required)
+
+```bash
+# Test using EDM computational method (no training needed)
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml
+
+# Evaluate with custom parameters
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml \
+    --test-samples 2000 \
+    --device cuda
+```
+
 ### Exporting a Model
 
 ```bash
@@ -96,10 +117,13 @@ sigma-score-estimator/
 ├── config/                      # Configuration files
 │   ├── default.yaml            # Default configuration
 │   ├── model_x.yaml            # Config for omega(x)
-│   └── model_x_sigma.yaml      # Config for omega(x,sigma)
+│   ├── model_x_sigma.yaml      # Config for omega(x,sigma)
+│   └── method_edm.yaml         # Config for EDM computational method
 ├── src/                        # Source code
-│   ├── models/                 # Model architectures
-│   ├── data/                   # Data loading and noise generation
+│   ├── models/                 # Model architectures (trained models)
+│   ├── computational/          # Computational methods (no training)
+│   ├── external/               # External dependencies (EDM denoiser)
+│   ├── datasets/               # Data loading and noise generation
 │   ├── training/               # Training and evaluation
 │   └── utils/                  # Utilities (logging, checkpointing, etc.)
 ├── experiments/                # Experiment outputs (auto-generated)
@@ -164,6 +188,7 @@ noise:
   
 training:
   loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_zscore
+                          # Note: omega_edm is computational (cannot be trained)
   epochs: 100
   learning_rate: 0.001
 ```
