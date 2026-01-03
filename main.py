@@ -185,7 +185,7 @@ def test_command(args):
     print("=" * 80)
     
     # Determine if using computational method
-    computational_methods = ['omega_edm', 'omega_expected']
+    computational_methods = ['omega_edm', 'omega_expected', 'omega_hybrid']
     use_computational = hasattr(args, 'method') and args.method in computational_methods
     
     # Load configuration
@@ -259,7 +259,8 @@ def test_command(args):
     # Load or create model
     if use_computational:
         # For computational methods, model will be created by evaluator
-        print("\nUsing EDM computational estimator (no checkpoint required)")
+        method_name = args.method if hasattr(args, 'method') else 'computational'
+        print(f"\nUsing {method_name} computational estimator (no checkpoint required)")
         model = None
     else:
         # Load trained model from checkpoint
@@ -406,6 +407,10 @@ def main():
     test_parser.add_argument('--method', type=str, choices=['omega_edm', 'omega_expected', 'omega_hybrid'],
                             help='Use computational method instead of trained model')
     test_parser.add_argument('--test-samples', type=int, help='Number of samples to test')
+    test_parser.add_argument('--sigma-min', type=float, help='Minimum noise level')
+    test_parser.add_argument('--sigma-max', type=float, help='Maximum noise level')
+    test_parser.add_argument('--sigma-threshold', type=float,
+                            help='Sigma threshold for hybrid method (only for omega_hybrid)')
     test_parser.add_argument('--device', type=str, help='Device (cuda/cpu)')
     test_parser.add_argument('--exp-dir', type=str, help='Test results directory')
     
