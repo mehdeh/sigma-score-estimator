@@ -7,10 +7,12 @@ A modular PyTorch framework for training ResNet-based models to estimate the **n
 This repository implements deep learning models that estimate the gradient of log-probability with respect to the noise level $\sigma$. The framework provides:
 
 - **Theoretical Foundation**: Complete mathematical derivation connecting denoising models to score functions
-- **Three Estimator Types**: 
+- **Multiple Estimator Types**: 
   - **Trained Models**: $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
   - **Trained Models**: $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
-  - **Computational Method**: omega_edm using pretrained EDM denoiser (no training required)
+  - **Computational Methods** (no training required):
+    - `omega_edm`: Uses pretrained EDM denoiser
+    - `omega_expected`: Uses statistical expectation
 - **Practical Implementation**: Multiple loss formulations enabling better control over noise scheduling in diffusion models
 
 ### Key Features
@@ -24,10 +26,14 @@ This repository implements deep learning models that estimate the gradient of lo
     - `omega_hat`: Original formulation
     - `omega_epsilon`: Epsilon-based formulation  
     - `omega_chi_zscore`: Chi-squared z-score formulation
-  - **Computational Method** (omega_edm): No training required
-    - Uses pretrained EDM denoiser to compute $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$
-    - $\tilde{\mathbf{x}}$ is obtained from pretrained EDM model
-    - Fast evaluation without training phase
+  - **Computational Methods**: No training required
+    - `omega_edm`: Uses pretrained EDM denoiser to compute $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$
+      - $\tilde{\mathbf{x}}$ is obtained from pretrained EDM model
+      - Requires ~200MB pretrained model download
+    - `omega_expected`: Uses statistical expectation to compute $\hat{\omega} = \frac{d}{\sigma}$
+      - Based on $\mathbb{E}[\|\epsilon\|^2] = d$ for $\epsilon \sim \mathcal{N}(0, \mathbf{I})$
+      - Extremely fast (no model inference)
+      - Perfect baseline for theoretical comparisons
   - All formulations derived from score matching principles
   - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for complete derivations
   
@@ -85,18 +91,23 @@ python main.py test \
     --test-samples 1000
 ```
 
-### Using Computational Method (No Training Required)
+### Using Computational Methods (No Training Required)
 
 ```bash
-# Test using EDM computational method (no training needed)
+# Test using EDM computational method (requires pretrained model)
 python main.py test \
     --method omega_edm \
     --config config/method_edm.yaml
 
+# Test using Expected Value computational method (no model required)
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml
+
 # Evaluate with custom parameters
 python main.py test \
-    --method omega_edm \
-    --config config/method_edm.yaml \
+    --method omega_expected \
+    --config config/method_expected.yaml \
     --test-samples 2000 \
     --device cuda
 ```
@@ -118,7 +129,8 @@ sigma-score-estimator/
 │   ├── default.yaml            # Default configuration
 │   ├── model_x.yaml            # Config for omega(x)
 │   ├── model_x_sigma.yaml      # Config for omega(x,sigma)
-│   └── method_edm.yaml         # Config for EDM computational method
+│   ├── method_edm.yaml         # Config for EDM computational method
+│   └── method_expected.yaml    # Config for Expected Value computational method
 ├── src/                        # Source code
 │   ├── models/                 # Model architectures (trained models)
 │   ├── computational/          # Computational methods (no training)
@@ -188,7 +200,7 @@ noise:
   
 training:
   loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_zscore
-                          # Note: omega_edm is computational (cannot be trained)
+                          # Note: omega_edm, omega_expected are computational (cannot be trained)
   epochs: 100
   learning_rate: 0.001
 ```

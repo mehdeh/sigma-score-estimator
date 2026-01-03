@@ -24,7 +24,7 @@ from .evaluation_utils import (
     compute_evaluation_metrics,
     log_evaluation_metrics,
 )
-from ..computational import EDMOmegaEstimator
+from ..computational import EDMOmegaEstimator, ExpectedOmegaEstimator
 
 
 class OmegaEvaluator:
@@ -58,20 +58,31 @@ class OmegaEvaluator:
         self.model_type = config['model']['type']
         self.loss_type = config['training']['loss_type']
         
-        # Check if this is a computational method (omega_edm)
-        self.is_computational = (self.loss_type == 'omega_edm')
+        # Check if this is a computational method
+        self.is_computational = (self.loss_type in ['omega_edm', 'omega_expected'])
         
         if self.is_computational:
-            # For computational methods, initialize EDM estimator
-            edm_model_name = config['model'].get('edm_model_name', 'cifar10-uncond-ve')
-            self.model = EDMOmegaEstimator(model_name=edm_model_name, device=device)
+            # For computational methods, initialize appropriate estimator
+            if self.loss_type == 'omega_edm':
+                # EDM-based computational method
+                edm_model_name = config['model'].get('edm_model_name', 'cifar10-uncond-ve')
+                self.model = EDMOmegaEstimator(model_name=edm_model_name, device=device)
+                self.logger_name = 'EDMOmegaEvaluator'
+                self.computational_info = f"EDM model: {edm_model_name}"
+            elif self.loss_type == 'omega_expected':
+                # Expected value computational method
+                image_dim = 3 * 32 * 32  # CIFAR-10
+                self.model = ExpectedOmegaEstimator(image_dim=image_dim, device=device)
+                self.logger_name = 'ExpectedOmegaEvaluator'
+                self.computational_info = f"Expected value method: d={image_dim}"
+            
             self.model.eval()
-            self.logger_name = 'EDMOmegaEvaluator'
         else:
             # For trained models, use the provided model
             self.model = model.to(device)
             self.model.eval()  # Set to evaluation mode
             self.logger_name = 'OmegaEvaluator'
+            self.computational_info = None
         
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
@@ -101,8 +112,8 @@ class OmegaEvaluator:
         self.logger = setup_logger(self.logger_name, log_file)
         
         if self.is_computational:
-            self.logger.info(f"Initialized {self.logger_name} with EDM computational method")
-            self.logger.info(f"EDM model: {edm_model_name}")
+            self.logger.info(f"Initialized {self.logger_name} with computational method: {self.loss_type}")
+            self.logger.info(f"{self.computational_info}")
         else:
             self.logger.info(f"Initialized {self.logger_name} with model type: {self.model_type}")
         self.logger.info(f"Output transform: {type(self.output_transform).__name__}")

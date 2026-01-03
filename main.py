@@ -76,14 +76,24 @@ def train_command(args):
     
     # Check if trying to train a computational method
     loss_type = config['training'].get('loss_type', 'omega_hat')
-    if loss_type == 'omega_edm':
+    computational_methods = ['omega_edm', 'omega_expected']
+    
+    if loss_type in computational_methods:
         print("=" * 80)
-        print("ERROR: Cannot train computational method 'omega_edm'")
+        print(f"ERROR: Cannot train computational method '{loss_type}'")
         print("=" * 80)
-        print("\nThe 'omega_edm' method is a computational estimator that uses")
-        print("a pretrained EDM denoiser. It does not require training.")
-        print("\nTo evaluate using the EDM computational method, use:")
-        print("  python main.py test --method omega_edm --config config/method_edm.yaml")
+        
+        if loss_type == 'omega_edm':
+            print("\nThe 'omega_edm' method is a computational estimator that uses")
+            print("a pretrained EDM denoiser. It does not require training.")
+            print("\nTo evaluate using the EDM computational method, use:")
+            print("  python main.py test --method omega_edm --config config/method_edm.yaml")
+        elif loss_type == 'omega_expected':
+            print("\nThe 'omega_expected' method is a computational estimator that uses")
+            print("the statistical expectation E[||ε||²] = d. It does not require training.")
+            print("\nTo evaluate using the expected value computational method, use:")
+            print("  python main.py test --method omega_expected --config config/method_expected.yaml")
+        
         print("\nFor trainable methods, use one of:")
         print("  - omega_hat")
         print("  - omega_epsilon")
@@ -170,7 +180,8 @@ def test_command(args):
     print("=" * 80)
     
     # Determine if using computational method
-    use_computational = hasattr(args, 'method') and args.method == 'omega_edm'
+    computational_methods = ['omega_edm', 'omega_expected']
+    use_computational = hasattr(args, 'method') and args.method in computational_methods
     
     # Load configuration
     if args.config:
@@ -193,7 +204,8 @@ def test_command(args):
             config = create_default_config()
     elif use_computational:
         # For computational methods, config is required
-        print("Error: --config is required when using computational methods (--method omega_edm)")
+        method_name = args.method if hasattr(args, 'method') else 'computational'
+        print(f"Error: --config is required when using computational methods (--method {method_name})")
         sys.exit(1)
     else:
         raise ValueError("Must provide either --config or --checkpoint")
@@ -203,9 +215,10 @@ def test_command(args):
     
     # If method is specified, override loss_type in config
     if use_computational:
-        config['training']['loss_type'] = 'omega_edm'
-        config['model']['type'] = 'omega_edm'
-        print(f"Using computational method: omega_edm")
+        method_name = args.method
+        config['training']['loss_type'] = method_name
+        config['model']['type'] = method_name
+        print(f"Using computational method: {method_name}")
     
     # Set device
     device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -383,9 +396,9 @@ def main():
     # Test command
     test_parser = subparsers.add_parser('test', help='Test a trained model or computational method')
     test_parser.add_argument('--checkpoint', type=str,
-                            help='Path to model checkpoint (not required for --method omega_edm)')
-    test_parser.add_argument('--config', type=str, help='Path to config file (required for --method omega_edm)')
-    test_parser.add_argument('--method', type=str, choices=['omega_edm'],
+                            help='Path to model checkpoint (not required for computational methods)')
+    test_parser.add_argument('--config', type=str, help='Path to config file (required for computational methods)')
+    test_parser.add_argument('--method', type=str, choices=['omega_edm', 'omega_expected'],
                             help='Use computational method instead of trained model')
     test_parser.add_argument('--test-samples', type=int, help='Number of samples to test')
     test_parser.add_argument('--device', type=str, help='Device (cuda/cpu)')

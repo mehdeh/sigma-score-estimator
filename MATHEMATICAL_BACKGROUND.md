@@ -377,6 +377,7 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 | Loss Type 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
 | **Computational** | | | | |
 | No training | `omega_edm` | $\frac{\\|\mathbf{x} - D_{EDM}(\mathbf{x}, \sigma)\\|^2}{\sigma^3}$ | Pretrained EDM denoiser | $\nabla_\sigma \log[\sigma^d p]$ |
+| No training | `omega_expected` | $\frac{d}{\sigma}$ | Statistical expectation | $\mathbb{E}[\nabla_\sigma \log[\sigma^d p]]$ |
 
 ---
 
@@ -434,6 +435,137 @@ $$
 2. Cannot adapt to specific data distributions through training
 3. Fixed capacity (cannot improve beyond EDM)
 4. Requires downloading pretrained model (~200MB)
+
+---
+
+## Computational Method: Expected Value Estimation
+
+### Overview
+
+The `omega_expected` method provides the simplest computational approach by using the statistical expectation of the squared norm of Gaussian noise. This method requires no training and no pretrained models—only knowledge of the image dimensionality.
+
+### Mathematical Formulation
+
+**Target (from Loss Type 2)**:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\|\epsilon\|^2}{\sigma}
+$$
+
+where $\epsilon \sim \mathcal{N}(0, \mathbf{I})$ with dimension $d$.
+
+**Statistical Property**:
+
+Since $\epsilon$ is a standard Gaussian random vector with dimension $d$:
+
+$$
+\|\epsilon\|^2 \sim \chi^2_d
+$$
+
+with the following properties:
+- Expectation: $\mathbb{E}[\|\epsilon\|^2] = d$
+- Variance: $\text{Var}[\|\epsilon\|^2] = 2d$
+
+**Computational Estimate**:
+
+Using the expectation:
+
+$$
+\hat{\omega}_{\text{expected}}(\sigma) = \frac{\mathbb{E}[\|\epsilon\|^2]}{\sigma} = \frac{d}{\sigma}
+$$
+
+This provides the expected (mean) value of $\hat{\omega}$ for any noisy image with noise level $\sigma$.
+
+### Interpretation
+
+**What does this estimate?**
+
+This method estimates the **expected value** of omega_hat:
+
+$$
+\mathbb{E}_{\epsilon \sim \mathcal{N}(0, \mathbf{I})}[\hat{\omega}] = \mathbb{E}\left[\frac{\|\epsilon\|^2}{\sigma}\right] = \frac{d}{\sigma}
+$$
+
+**Note**: This is a constant for a given noise level and image dimensionality. It does not depend on the actual image content, only on the statistical properties of the noise.
+
+### Relationship to Other Methods
+
+**Trained Methods**:
+- Learn image-dependent predictions: $\hat{\omega}_\theta(\mathbf{x}, \sigma)$
+- Adapt to specific data distributions
+- Output varies with image content
+
+**EDM Computational Method**:
+- Uses pretrained denoiser: $\hat{\omega}_{\text{edm}}(\mathbf{x}, \sigma) = \frac{\|\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\|^2}{\sigma^3}$
+- Image-dependent (varies with $\mathbf{x}$)
+- Requires model inference
+
+**Expected Value Method**:
+- Uses statistical expectation: $\hat{\omega}_{\text{expected}}(\sigma) = \frac{d}{\sigma}$
+- Image-independent (only depends on $\sigma$)
+- No model inference required
+- Provides theoretical baseline
+
+### Advantages and Limitations
+
+**Advantages**:
+1. **Simplest possible estimator**: No training, no models, just a formula
+2. **Extremely fast**: No neural network inference required
+3. **Mathematically grounded**: Based on well-known chi-squared distribution properties
+4. **Perfect theoretical baseline**: Represents the expected value that trained models should approximate on average
+5. **Zero setup**: No pretrained models to download
+
+**Limitations**:
+1. **Image-independent**: Cannot adapt to specific image content
+2. **Only provides expectation**: Cannot capture variance or image-specific deviations
+3. **Baseline only**: Not suitable for actual sampling (use trained models or EDM method instead)
+
+**When to use**:
+- As a sanity check for trained models
+- For theoretical comparisons and analysis
+- To verify that trained models are learning meaningful patterns beyond the baseline
+- For quick approximate estimates when high accuracy is not critical
+
+### Variance Analysis
+
+While this method provides the expected value $\mathbb{E}[\hat{\omega}] = \frac{d}{\sigma}$, the actual values have variance:
+
+$$
+\text{Var}[\hat{\omega}] = \text{Var}\left[\frac{\|\epsilon\|^2}{\sigma}\right] = \frac{\text{Var}[\|\epsilon\|^2]}{\sigma^2} = \frac{2d}{\sigma^2}
+$$
+
+This means:
+- For large $\sigma$: Low variance, expected value is a good approximation
+- For small $\sigma$: High variance, individual values can deviate significantly from $\frac{d}{\sigma}$
+
+**Standard deviation**: $\text{SD}[\hat{\omega}] = \frac{\sqrt{2d}}{\sigma}$
+
+### Comparison with Ground Truth
+
+For a specific noisy image with known clean image $\tilde{\mathbf{x}}$:
+
+**Ground truth**: 
+$$
+\hat{\omega}_{\text{true}} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3} = \frac{\|\sigma \epsilon\|^2}{\sigma^3} = \frac{\|\epsilon\|^2}{\sigma}
+$$
+
+**Expected value estimate**:
+$$
+\hat{\omega}_{\text{expected}} = \frac{d}{\sigma}
+$$
+
+**Relationship**:
+$$
+\mathbb{E}[\hat{\omega}_{\text{true}}] = \hat{\omega}_{\text{expected}}
+$$
+
+On average over many samples, the expected value method provides the correct mean, but individual predictions will differ by:
+
+$$
+\hat{\omega}_{\text{true}} - \hat{\omega}_{\text{expected}} = \frac{\|\epsilon\|^2 - d}{\sigma}
+$$
+
+This difference is a zero-mean random variable with variance $\frac{2d}{\sigma^2}$.
 
 ---
 

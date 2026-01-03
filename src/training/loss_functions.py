@@ -22,7 +22,8 @@ class LossFactory:
         'omega_hat',           # Loss Type 1: Original formulation
         'omega_epsilon',       # Loss Type 2: Epsilon-based formulation
         'omega_chi_zscore',    # Loss Type 9: Chi-squared z-score
-        'omega_edm'            # Computational method: EDM-based estimation (no training)
+        'omega_edm',           # Computational method: EDM-based estimation (no training)
+        'omega_expected'       # Computational method: Expected value estimation (no training)
     ]
     
     @staticmethod
@@ -46,6 +47,9 @@ class LossFactory:
         elif loss_type == 'omega_chi_zscore':
             return OmegaChiZScoreLoss(image_dim=image_dim)
         elif loss_type == 'omega_edm':
+            # Computational method - no loss function needed
+            return None
+        elif loss_type == 'omega_expected':
             # Computational method - no loss function needed
             return None
         else:
@@ -271,6 +275,7 @@ def print_loss_info():
         ("omega_epsilon", "Epsilon-based: (ω - ||ε||²/σ)²"),
         ("omega_chi_zscore", "Chi z-score: (output - (||ε||²-d)/√(2d))²"),
         ("omega_edm", "Computational: EDM-based (no training required)"),
+        ("omega_expected", "Computational: Expected value d/σ (no training required)"),
     ]
     
     for i, (name, desc) in enumerate(loss_info, 1):

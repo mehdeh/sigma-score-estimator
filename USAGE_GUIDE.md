@@ -235,15 +235,84 @@ data:
 - `cifar10-cond-ve`: Conditional, VE parameterization
 - `cifar10-cond-vp`: Conditional, VP parameterization
 
-### Comparison: Trained vs Computational
+---
 
-| Aspect | Trained Models | Computational (EDM) |
-|--------|---------------|---------------------|
-| Training Required | Yes (hours) | No |
-| Pretrained Model | Not needed | EDM model (~200MB) |
-| Accuracy | High (trained on data) | Good (depends on EDM) |
-| Speed (after setup) | Fast | Fast |
-| Use Case | Best accuracy | Quick evaluation |
+### Expected Value Omega Estimation
+
+The `omega_expected` method provides the simplest computational approach using only statistical expectation:
+
+**Key Features:**
+- No training phase required
+- No pretrained models required
+- Computes: $\hat{\omega} = \frac{d}{\sigma}$ where $d$ is image dimensionality
+- Based on: $\mathbb{E}[\|\epsilon\|^2] = d$ for $\epsilon \sim \mathcal{N}(0, \mathbf{I})$
+- Extremely fast (no model inference)
+- Perfect theoretical baseline
+
+### Basic Expected Value Method Usage
+
+```bash
+# Evaluate using Expected Value computational method
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml
+```
+
+### Expected Value Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml \
+    --test-samples 2000
+
+# Use specific device
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml \
+    --device cuda
+```
+
+### Expected Value Configuration
+
+The Expected Value method uses `config/method_expected.yaml`:
+
+```yaml
+model:
+  type: "omega_expected"
+  image_dim: 3072  # 3×32×32 for CIFAR-10
+  
+training:
+  loss_type: "omega_expected"  # Indicates computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Mathematical Background:**
+- For $\epsilon \sim \mathcal{N}(0, \mathbf{I})$ with dimension $d$: $\|\epsilon\|^2 \sim \chi^2_d$
+- Expected value: $\mathbb{E}[\|\epsilon\|^2] = d$
+- Therefore: $\mathbb{E}[\hat{\omega}] = \mathbb{E}[\|\epsilon\|^2 / \sigma] = d / \sigma$
+
+---
+
+### Comparison: Trained vs Computational Methods
+
+| Aspect | Trained Models | EDM Method | Expected Value Method |
+|--------|---------------|------------|----------------------|
+| Training Required | Yes (hours) | No | No |
+| Pretrained Model | Not needed | EDM (~200MB) | Not needed |
+| Model Inference | Yes | Yes (EDM) | No |
+| Accuracy | High (trained) | Good (EDM quality) | Baseline (expected value) |
+| Speed (after setup) | Fast | Fast | Extremely fast |
+| Use Case | Best accuracy | Quick evaluation | Theoretical baseline |
 
 ### EDM Method Output
 
