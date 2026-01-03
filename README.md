@@ -7,9 +7,13 @@ A modular PyTorch framework for training ResNet-based models to estimate the **n
 This repository implements deep learning models that estimate the gradient of log-probability with respect to the noise level $\sigma$. The framework provides:
 
 - **Theoretical Foundation**: Complete mathematical derivation connecting denoising models to score functions
-- **Two Estimator Types**: 
-  - $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
-  - $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
+- **Multiple Estimator Types**: 
+  - **Trained Models**: $\omega_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log p(\mathbf{x}, \sigma)$
+  - **Trained Models**: $\hat{\omega}_{\phi}(\mathbf{x}, \sigma)$ for estimating $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$ (corrected objective)
+  - **Computational Methods** (no training required):
+    - `omega_edm`: Uses pretrained EDM denoiser
+    - `omega_expected`: Uses statistical expectation
+    - `omega_hybrid`: Adaptive combination of both methods
 - **Practical Implementation**: Multiple loss formulations enabling better control over noise scheduling in diffusion models
 
 ### Key Features
@@ -18,12 +22,24 @@ This repository implements deep learning models that estimate the gradient of lo
   - $\omega_{\phi}(\mathbf{x})$: Image-only input
   - $\omega_{\phi}(\mathbf{x}, \sigma)$: Image and noise level input
 
-- **Multiple Loss Functions:**
-  - 9 different loss formulations with rigorous theoretical foundation
-  - Omega-based losses (Types 1-4, 9): Direct estimation of corrected sigma score $\nabla_\sigma \log[\sigma^d p(\mathbf{x}, \sigma)]$
-  - Sigma-based losses (Types 5-8): Indirect estimation via noise level prediction
+- **Multiple Estimation Methods:**
+  - **Trained Models** (3 loss functions): Require training on data
+    - `omega_hat`: Original formulation
+    - `omega_epsilon`: Epsilon-based formulation  
+    - `omega_chi_zscore`: Chi-squared z-score formulation
+  - **Computational Methods**: No training required
+    - `omega_edm`: Uses pretrained EDM denoiser to compute $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$
+      - $\tilde{\mathbf{x}}$ is obtained from pretrained EDM model
+      - Requires ~200MB pretrained model download
+    - `omega_expected`: Uses statistical expectation to compute $\hat{\omega} = \frac{d}{\sigma}$
+      - Based on $\mathbb{E}[\|\epsilon\|^2] = d$ for $\epsilon \sim \mathcal{N}(0, \mathbf{I})$
+      - Extremely fast (no model inference)
+      - Perfect baseline for theoretical comparisons
+    - `omega_hybrid`: Adaptive hybrid combining both EDM and Expected Value
+      - For $\sigma < \text{threshold}$: uses Expected Value ($\frac{d}{\sigma}$)
+      - For $\sigma \geq \text{threshold}$: uses EDM denoiser
+      - Best of both worlds: accurate across all sigma ranges
   - All formulations derived from score matching principles
-  - Output transformations applied during inference (not training) for types 5-9
   - See [MATHEMATICAL_BACKGROUND.md](MATHEMATICAL_BACKGROUND.md) for complete derivations
   
 - **Flexible Noise Sampling:**
@@ -80,6 +96,32 @@ python main.py test \
     --test-samples 1000
 ```
 
+### Using Computational Methods (No Training Required)
+
+```bash
+# Test using EDM computational method (requires pretrained model)
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml
+
+# Test using Expected Value computational method (no model required)
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml
+
+# Test using Hybrid computational method (adaptive, best of both)
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml
+
+# Evaluate with custom parameters
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
+    --test-samples 2000 \
+    --device cuda
+```
+
 ### Exporting a Model
 
 ```bash
@@ -96,10 +138,15 @@ sigma-score-estimator/
 ├── config/                      # Configuration files
 │   ├── default.yaml            # Default configuration
 │   ├── model_x.yaml            # Config for omega(x)
-│   └── model_x_sigma.yaml      # Config for omega(x,sigma)
+│   ├── model_x_sigma.yaml      # Config for omega(x,sigma)
+│   ├── method_edm.yaml         # Config for EDM computational method
+│   ├── method_expected.yaml    # Config for Expected Value computational method
+│   └── method_hybrid.yaml      # Config for Hybrid computational method
 ├── src/                        # Source code
-│   ├── models/                 # Model architectures
-│   ├── data/                   # Data loading and noise generation
+│   ├── models/                 # Model architectures (trained models)
+│   ├── computational/          # Computational methods (no training)
+│   ├── external/               # External dependencies (EDM denoiser)
+│   ├── datasets/               # Data loading and noise generation
 │   ├── training/               # Training and evaluation
 │   └── utils/                  # Utilities (logging, checkpointing, etc.)
 ├── experiments/                # Experiment outputs (auto-generated)
@@ -164,6 +211,7 @@ noise:
   
 training:
   loss_type: "omega_hat"  # Options: omega_hat, omega_epsilon, omega_chi_zscore
+                          # Note: omega_edm, omega_expected, omega_hybrid are computational (cannot be trained)
   epochs: 100
   learning_rate: 0.001
 ```

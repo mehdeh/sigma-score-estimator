@@ -1,0 +1,78 @@
+# Configuration for Expected Value Computational Method
+# 
+# This configuration is for the omega_expected computational method which uses
+# the statistical expectation of ||ε||² to estimate omega_hat without training.
+#
+# The method computes: ω̂ = d / σ
+# where d is the image dimensionality and σ is the noise level.
+#
+# Mathematical Background:
+# -----------------------
+# Since ε ~ N(0, I) with dimension d, we have:
+#   E[||ε||²] = d
+# 
+# The ground truth is:
+#   ω̂ = ||ε||² / σ
+# 
+# Therefore, the expected value provides a simple baseline:
+#   E[ω̂] = E[||ε||²] / σ = d / σ
+
+# Model configuration
+model:
+  type: "omega_expected"  # Computational method (no training required)
+  image_dim: 3072  # 3×32×32 for CIFAR-10
+  # For other datasets, adjust image_dim accordingly:
+  #   - MNIST: 1×28×28 = 784
+  #   - CIFAR-10: 3×32×32 = 3072
+  #   - ImageNet (224×224): 3×224×224 = 150528
+
+# Training configuration (not used for computational methods, but kept for compatibility)
+training:
+  loss_type: "omega_expected"  # Indicates computational method
+
+# Noise generation configuration
+noise:
+  sigma_min: 0.01  # Minimum noise level
+  sigma_max: 10.0  # Maximum noise level
+  strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
+  num_samples: 100  # Number of pre-filtered samples for select_batch strategy
+
+# Data configuration
+data:
+  batch_size: 128  # Batch size for evaluation
+  num_workers: 4  # Number of data loading workers
+  train_val_split: [0.85, 0.10]  # [train_ratio, val_ratio]
+  test_split: 0.05
+  data_root: "./data"
+
+# Device and seed
+device: "cuda"  # Options: "cuda", "cpu"
+seed: 42
+
+# Notes:
+# - This method does NOT require training
+# - This method does NOT require pretrained models
+# - Evaluation is done using only the expectation formula: ω̂ = d / σ
+# - This is the simplest possible baseline estimator
+# - Results provide the expected (mean) value of omega_hat
+# - Extremely fast (no model inference required)
+#
+# Mathematical Properties:
+# - This estimates the expected value: E[ω̂] = d / σ
+# - Variance: Var[ω̂] = Var[||ε||²] / σ² = 2d / σ²
+# - This provides a "baseline" or "oracle" estimate
+#
+# Usage:
+#   python main.py test --method omega_expected --config config/method_expected.yaml
+#   python main.py test --method omega_expected --config config/method_expected.yaml --test-samples 1000
+#
+# Comparison with other methods:
+# - omega_hat (trained): Learns to predict ||x-x̃||²/σ³ from data
+# - omega_edm: Uses pretrained EDM denoiser to compute ||x-x̃||²/σ³
+# - omega_expected: Uses E[||ε||²] = d to compute d/σ (this method)
+#   * Fastest (no model inference)
+#   * Provides expected value (baseline)
+#   * No training or pretrained models needed
+#   * Best for theoretical comparisons and sanity checks
+
+
