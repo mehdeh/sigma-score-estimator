@@ -1,0 +1,51 @@
+# Configuration for EDM Computational Method
+# 
+# This configuration is for the omega_edm computational method which uses
+# a pretrained EDM denoiser to estimate omega_hat without training.
+#
+# The method computes: ω̂ = ||x - x̃||² / σ³
+# where x̃ is the denoised image from the pretrained EDM model.
+
+# Model configuration
+model:
+  type: "omega_edm"  # Computational method (no training required)
+  edm_model_name: "cifar10-uncond-ve"  # Pretrained EDM model to use
+  # Available EDM models:
+  #   - cifar10-uncond-vp: Unconditional CIFAR-10, VP parameterization
+  #   - cifar10-uncond-ve: Unconditional CIFAR-10, VE parameterization (recommended)
+  #   - cifar10-cond-vp: Conditional CIFAR-10, VP parameterization
+  #   - cifar10-cond-ve: Conditional CIFAR-10, VE parameterization
+
+# Training configuration (not used for computational methods, but kept for compatibility)
+training:
+  loss_type: "omega_edm"  # Indicates computational method
+
+# Noise generation configuration
+noise:
+  sigma_min: 0.01  # Minimum noise level
+  sigma_max: 10.0  # Maximum noise level
+  strategy: "uniform"  # Options: "uniform", "log_uniform", "select_batch"
+  num_samples: 100  # Number of pre-filtered samples for select_batch strategy
+
+# Data configuration
+data:
+  batch_size: 128  # Batch size for evaluation
+  num_workers: 4  # Number of data loading workers
+  train_val_split: [0.85, 0.10]  # [train_ratio, val_ratio]
+  test_split: 0.05
+  data_root: "./data"
+
+# Device and seed
+device: "cuda"  # Options: "cuda", "cpu"
+seed: 42
+
+# Notes:
+# - This method does NOT require training
+# - Evaluation is done directly using the pretrained EDM denoiser
+# - The EDM model will be automatically downloaded on first use (~200MB)
+# - Results are comparable to trained omega_hat models
+#
+# Usage:
+#   python main.py test --method omega_edm --config config/method_edm.yaml
+#   python main.py test --method omega_edm --config config/method_edm.yaml --test-samples 1000
+

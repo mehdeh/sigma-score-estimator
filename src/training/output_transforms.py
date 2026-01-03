@@ -150,6 +150,11 @@ class TransformFactory:
         
         # Loss type 9: Chi-squared z-score
         'omega_chi_zscore': ChiZScoreTransform,
+        
+        # Computational methods: Output omega_hat directly
+        'omega_edm': IdentityTransform,      # EDM-based estimation
+        'omega_expected': IdentityTransform,  # Expected value estimation
+        'omega_hybrid': IdentityTransform,    # Hybrid EDM + Expected
     }
     
     @staticmethod
@@ -210,6 +215,11 @@ def get_transform_info():
         ("", "", ""),
         ("Loss Type 9", "ChiZScoreTransform", "(output * √(2d) + d) / σ"),
         ("omega_chi_zscore", "z-score → ω", "ω = ||ε||² / σ"),
+        ("", "", ""),
+        ("Computational", "IdentityTransform", "output (no change)"),
+        ("omega_edm", "No transform", "EDM denoiser: ||x-x̃||²/σ³"),
+        ("omega_expected", "No transform", "Expected value: d/σ"),
+        ("omega_hybrid", "No transform", "Hybrid: σ-based switching"),
     ]
     
     for name, transform, formula in transform_info:

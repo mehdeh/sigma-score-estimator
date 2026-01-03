@@ -24,6 +24,7 @@ from .evaluation_utils import (
     compute_evaluation_metrics,
     log_evaluation_metrics,
 )
+from ..computational import EDMOmegaEstimator, ExpectedOmegaEstimator, HybridOmegaEstimator
 
 
 class OmegaEvaluator:
@@ -48,8 +49,6 @@ class OmegaEvaluator:
         exp_dir,
         device='cuda'
     ):
-        self.model = model.to(device)
-        self.model.eval()  # Set to evaluation mode
         self.test_loader = test_loader
         self.config = config
         self.exp_dir = exp_dir
@@ -58,6 +57,45 @@ class OmegaEvaluator:
         # Extract config parameters
         self.model_type = config['model']['type']
         self.loss_type = config['training']['loss_type']
+        
+        # Check if this is a computational method
+        self.is_computational = (self.loss_type in ['omega_edm', 'omega_expected', 'omega_hybrid'])
+        
+        if self.is_computational:
+            # For computational methods, initialize appropriate estimator
+            if self.loss_type == 'omega_edm':
+                # EDM-based computational method
+                edm_model_name = config['model'].get('edm_model_name', 'cifar10-uncond-ve')
+                self.model = EDMOmegaEstimator(model_name=edm_model_name, device=device)
+                self.logger_name = 'EDMOmegaEvaluator'
+                self.computational_info = f"EDM model: {edm_model_name}"
+            elif self.loss_type == 'omega_expected':
+                # Expected value computational method
+                image_dim = 3 * 32 * 32  # CIFAR-10
+                self.model = ExpectedOmegaEstimator(image_dim=image_dim, device=device)
+                self.logger_name = 'ExpectedOmegaEvaluator'
+                self.computational_info = f"Expected value method: d={image_dim}"
+            elif self.loss_type == 'omega_hybrid':
+                # Hybrid computational method
+                image_dim = 3 * 32 * 32  # CIFAR-10
+                sigma_threshold = config['model'].get('sigma_threshold', 1.0)
+                edm_model_name = config['model'].get('edm_model_name', 'cifar10-uncond-ve')
+                self.model = HybridOmegaEstimator(
+                    sigma_threshold=sigma_threshold,
+                    edm_model_name=edm_model_name,
+                    image_dim=image_dim,
+                    device=device
+                )
+                self.logger_name = 'HybridOmegaEvaluator'
+                self.computational_info = f"Hybrid method: threshold={sigma_threshold}, EDM={edm_model_name}"
+            
+            self.model.eval()
+        else:
+            # For trained models, use the provided model
+            self.model = model.to(device)
+            self.model.eval()  # Set to evaluation mode
+            self.logger_name = 'OmegaEvaluator'
+            self.computational_info = None
         
         # Initialize noise generator
         self.noise_generator = NoiseGenerator(
@@ -68,7 +106,7 @@ class OmegaEvaluator:
             device=device
         )
         
-        # Initialize loss function
+        # Initialize loss function (None for computational methods)
         image_dim = 3 * 32 * 32  # CIFAR-10
         self.loss_fn = LossFactory.get_loss(
             self.loss_type,
@@ -84,9 +122,13 @@ class OmegaEvaluator:
         
         # Initialize logger
         log_file = os.path.join(exp_dir, 'test.log')
-        self.logger = setup_logger('OmegaEvaluator', log_file)
+        self.logger = setup_logger(self.logger_name, log_file)
         
-        self.logger.info(f"Initialized OmegaEvaluator with model type: {self.model_type}")
+        if self.is_computational:
+            self.logger.info(f"Initialized {self.logger_name} with computational method: {self.loss_type}")
+            self.logger.info(f"{self.computational_info}")
+        else:
+            self.logger.info(f"Initialized {self.logger_name} with model type: {self.model_type}")
         self.logger.info(f"Output transform: {type(self.output_transform).__name__}")
     
     def evaluate(self, num_samples=None, visualize=True):
@@ -141,7 +183,10 @@ class OmegaEvaluator:
                 noisy_images, noise = self.noise_generator.add_noise(images, sigma)
                 
                 # Forward pass
-                if self.model_type == 'omega_x':
+                if self.is_computational:
+                    # Computational methods (EDM) directly output omega_hat
+                    output = self.model(noisy_images, sigma)
+                elif self.model_type == 'omega_x':
                     output = self.model(noisy_images)
                 else:  # omega_x_sigma
                     output = self.model(noisy_images, sigma)
@@ -160,8 +205,12 @@ class OmegaEvaluator:
                 # Compute raw target (in same space as raw model output)
                 raw_target = compute_raw_target(images, noisy_images, sigma, self.loss_type)
                 
-                # Compute loss (for logging purposes)
-                loss = self.loss_fn(output, images, noisy_images, sigma)
+                # Compute loss (for logging purposes, skip for computational methods)
+                if self.loss_fn is not None:
+                    loss = self.loss_fn(output, images, noisy_images, sigma)
+                else:
+                    # For computational methods, loss is N/A
+                    loss = torch.tensor(0.0)
                 
                 # Store results (omega_hat predictions and targets)
                 all_predictions.append(omega_hat.squeeze().cpu())

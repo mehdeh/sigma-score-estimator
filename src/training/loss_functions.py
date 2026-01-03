@@ -21,7 +21,10 @@ class LossFactory:
     AVAILABLE_LOSSES = [
         'omega_hat',           # Loss Type 1: Original formulation
         'omega_epsilon',       # Loss Type 2: Epsilon-based formulation
-        'omega_chi_zscore'     # Loss Type 9: Chi-squared z-score
+        'omega_chi_zscore',    # Loss Type 9: Chi-squared z-score
+        'omega_edm',           # Computational method: EDM-based estimation (no training)
+        'omega_expected',      # Computational method: Expected value estimation (no training)
+        'omega_hybrid'         # Computational method: Hybrid EDM + Expected (no training)
     ]
     
     @staticmethod
@@ -34,7 +37,7 @@ class LossFactory:
             image_dim: Dimensionality of the image (e.g., 3*32*32=3072 for CIFAR-10)
             
         Returns:
-            Loss function instance
+            Loss function instance, or None for computational methods that don't require loss functions
         """
         loss_type = loss_type.lower()
         
@@ -44,6 +47,15 @@ class LossFactory:
             return OmegaEpsilonLoss()
         elif loss_type == 'omega_chi_zscore':
             return OmegaChiZScoreLoss(image_dim=image_dim)
+        elif loss_type == 'omega_edm':
+            # Computational method - no loss function needed
+            return None
+        elif loss_type == 'omega_expected':
+            # Computational method - no loss function needed
+            return None
+        elif loss_type == 'omega_hybrid':
+            # Computational method - no loss function needed
+            return None
         else:
             raise ValueError(f"Unknown loss type: {loss_type}. Available: {LossFactory.AVAILABLE_LOSSES}")
 
@@ -266,6 +278,9 @@ def print_loss_info():
         ("omega_hat", "Original formulation: (ω - ||x-x̃||²/σ³)²"),
         ("omega_epsilon", "Epsilon-based: (ω - ||ε||²/σ)²"),
         ("omega_chi_zscore", "Chi z-score: (output - (||ε||²-d)/√(2d))²"),
+        ("omega_edm", "Computational: EDM-based (no training required)"),
+        ("omega_expected", "Computational: Expected value d/σ (no training required)"),
+        ("omega_hybrid", "Computational: Hybrid EDM+Expected (no training required)"),
     ]
     
     for i, (name, desc) in enumerate(loss_info, 1):

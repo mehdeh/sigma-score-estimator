@@ -169,6 +169,239 @@ python main.py test \
     --test-samples 5000
 ```
 
+## Using Computational Methods (No Training Required)
+
+### EDM-Based Omega Estimation
+
+The `omega_edm` method provides a computational approach to estimate omega_hat using a pretrained EDM denoiser, without requiring any training:
+
+**Key Features:**
+- No training phase required
+- Uses pretrained EDM model from NVlabs
+- Computes: $\hat{\omega} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$ where $\tilde{\mathbf{x}}$ is from EDM denoiser
+- Fast evaluation
+- Results comparable to trained models
+
+### Basic EDM Method Usage
+
+```bash
+# Evaluate using EDM computational method
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml
+```
+
+### EDM Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml \
+    --test-samples 2000
+
+# Use different EDM model and device
+python main.py test \
+    --method omega_edm \
+    --config config/method_edm.yaml \
+    --device cuda:0
+```
+
+### EDM Configuration
+
+The EDM method uses `config/method_edm.yaml`:
+
+```yaml
+model:
+  type: "omega_edm"
+  edm_model_name: "cifar10-uncond-ve"  # Pretrained model
+  
+training:
+  loss_type: "omega_edm"  # Indicates computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Available EDM Models:**
+- `cifar10-uncond-ve`: Unconditional, VE parameterization (recommended)
+- `cifar10-uncond-vp`: Unconditional, VP parameterization
+- `cifar10-cond-ve`: Conditional, VE parameterization
+- `cifar10-cond-vp`: Conditional, VP parameterization
+
+---
+
+### Expected Value Omega Estimation
+
+The `omega_expected` method provides the simplest computational approach using only statistical expectation:
+
+**Key Features:**
+- No training phase required
+- No pretrained models required
+- Computes: $\hat{\omega} = \frac{d}{\sigma}$ where $d$ is image dimensionality
+- Based on: $\mathbb{E}[\|\epsilon\|^2] = d$ for $\epsilon \sim \mathcal{N}(0, \mathbf{I})$
+- Extremely fast (no model inference)
+- Perfect theoretical baseline
+
+### Basic Expected Value Method Usage
+
+```bash
+# Evaluate using Expected Value computational method
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml
+```
+
+### Expected Value Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml \
+    --test-samples 2000
+
+# Use specific device
+python main.py test \
+    --method omega_expected \
+    --config config/method_expected.yaml \
+    --device cuda
+```
+
+### Expected Value Configuration
+
+The Expected Value method uses `config/method_expected.yaml`:
+
+```yaml
+model:
+  type: "omega_expected"
+  image_dim: 3072  # 3×32×32 for CIFAR-10
+  
+training:
+  loss_type: "omega_expected"  # Indicates computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Mathematical Background:**
+- For $\epsilon \sim \mathcal{N}(0, \mathbf{I})$ with dimension $d$: $\|\epsilon\|^2 \sim \chi^2_d$
+- Expected value: $\mathbb{E}[\|\epsilon\|^2] = d$
+- Therefore: $\mathbb{E}[\hat{\omega}] = \mathbb{E}[\|\epsilon\|^2 / \sigma] = d / \sigma$
+
+---
+
+### Hybrid Omega Estimation
+
+The `omega_hybrid` method combines the best of both EDM and Expected Value methods using adaptive sigma-based switching:
+
+**Key Features:**
+- Adaptive method selection based on sigma threshold
+- For $\sigma < \text{threshold}$: Uses Expected Value ($\frac{d}{\sigma}$)
+- For $\sigma \geq \text{threshold}$: Uses EDM denoiser ($\frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3}$)
+- Best of both worlds: accurate across all sigma ranges
+- Per-sample adaptive: each sample can use a different method
+
+### Basic Hybrid Method Usage
+
+```bash
+# Evaluate using Hybrid computational method
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml
+```
+
+### Hybrid Method with Custom Parameters
+
+```bash
+# Test with specific number of samples
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
+    --test-samples 2000
+
+# Use specific device
+python main.py test \
+    --method omega_hybrid \
+    --config config/method_hybrid.yaml \
+    --device cuda
+```
+
+### Hybrid Configuration
+
+The Hybrid method uses `config/method_hybrid.yaml`:
+
+```yaml
+model:
+  type: "omega_hybrid"
+  sigma_threshold: 1.0  # Threshold for method switching
+  edm_model_name: "cifar10-uncond-ve"  # For large sigma
+  image_dim: 3072  # For small sigma
+  
+training:
+  loss_type: "omega_hybrid"  # Indicates hybrid computational method
+  
+noise:
+  sigma_min: 0.01
+  sigma_max: 10.0
+  strategy: "uniform"
+  
+data:
+  batch_size: 128
+  data_root: "./data"
+```
+
+**Tuning the Threshold:**
+- Default: 1.0 (reasonable starting point)
+- Based on empirical observation: use error vs sigma plots
+- Lower threshold: Use EDM more often
+- Higher threshold: Use Expected Value more often
+
+**Rationale:**
+- Expected Value works better for small $\sigma$ (high SNR)
+- EDM denoiser works better for large $\sigma$ (low SNR)
+- Hybrid automatically selects the best method per sample
+
+---
+
+### Comparison: Trained vs Computational Methods
+
+| Aspect | Trained Models | EDM Method | Expected Value | Hybrid Method |
+|--------|---------------|------------|----------------|---------------|
+| Training Required | Yes (hours) | No | No | No |
+| Pretrained Model | Not needed | EDM (~200MB) | Not needed | EDM (~200MB) |
+| Model Inference | Yes | Yes (EDM) | No | Yes (adaptive) |
+| Accuracy | High (trained) | Good (large σ) | Good (small σ) | Best overall |
+| Speed (after setup) | Fast | Fast | Extremely fast | Fast |
+| Adaptivity | No | No | No | Yes (σ-based) |
+| Use Case | Best accuracy | Quick eval | Baseline | Best computational |
+
+### EDM Method Output
+
+Testing with EDM method creates the same output structure:
+
+```
+experiments/test/exp_YYYYMMDD_HHMMSS/
+├── config.yaml              # Test configuration
+├── test.log                 # Test logs (shows EDM loading)
+├── test_metrics.json        # Evaluation metrics
+├── test_scatter_predictions.png    # Predictions vs targets
+├── test_error_vs_sigma.png         # Error vs noise level
+└── test_sample_images.png          # Sample images
+```
+
 ### Test Output
 
 Testing creates a test directory:

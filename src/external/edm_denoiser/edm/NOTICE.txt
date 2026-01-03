@@ -1,0 +1,27 @@
+NOTICE
+
+This directory contains code from the EDM project developed by NVIDIA Corporation.
+
+Original Work:
+  Title: Elucidating the Design Space of Diffusion-Based Generative Models (EDM)
+  Authors: Tero Karras, Miika Aittala, Timo Aila, Samuli Laine
+  Source: https://github.com/NVlabs/edm
+  License: CC BY-NC-SA 4.0
+
+The following components are included:
+- dnnlib: Utility library for deep learning
+- torch_utils: PyTorch utilities including persistence module
+
+These components are used for loading and working with pretrained EDM models
+for image denoising tasks.
+
+No modifications have been made to the original code.
+
+Citation:
+  @inproceedings{Karras2022edm,
+    title={Elucidating the Design Space of Diffusion-Based Generative Models},
+    author={Tero Karras and Miika Aittala and Timo Aila and Samuli Laine},
+    booktitle={Proc. NeurIPS},
+    year={2022}
+  }
+

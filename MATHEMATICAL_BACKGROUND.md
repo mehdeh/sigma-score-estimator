@@ -369,11 +369,380 @@ By the Central Limit Theorem, this approximation becomes increasingly accurate f
 
 ### Summary Table
 
-| Loss Type | Name | Target Quantity | Key Feature | Estimates |
-|-----------|------|----------------|-------------|-----------|
-| 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Corrected formulation | $\nabla_\sigma \log[\sigma^d p]$ |
-| 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based, numerically stable | $\nabla_\sigma \log[\sigma^d p]$ |
-| 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
+| Method Type | Name | Target Quantity | Key Feature | Estimates |
+|-------------|------|----------------|-------------|-----------|
+| **Trained Models** | | | | |
+| Loss Type 1 | `omega_hat` | $\frac{\\|\mathbf{x} - \tilde{\mathbf{x}}\\|^2}{\sigma^3}$ | Corrected formulation | $\nabla_\sigma \log[\sigma^d p]$ |
+| Loss Type 2 | `omega_epsilon` | $\frac{\\|\epsilon\\|^2}{\sigma}$ | Noise-based, numerically stable | $\nabla_\sigma \log[\sigma^d p]$ |
+| Loss Type 9 | `omega_chi_zscore` | $\frac{\\|\epsilon\\|^2 - d}{\sqrt{2d}}$ | Chi-squared z-score | $\nabla_\sigma \log[\sigma^d p]$ |
+| **Computational** | | | | |
+| No training | `omega_edm` | $\frac{\\|\mathbf{x} - D_{EDM}(\mathbf{x}, \sigma)\\|^2}{\sigma^3}$ | Pretrained EDM denoiser | $\nabla_\sigma \log[\sigma^d p]$ |
+| No training | `omega_expected` | $\frac{d}{\sigma}$ | Statistical expectation | $\mathbb{E}[\nabla_\sigma \log[\sigma^d p]]$ |
+| No training | `omega_hybrid` | Adaptive switching | Combines EDM + Expected | $\nabla_\sigma \log[\sigma^d p]$ |
+
+---
+
+## Computational Method: EDM-Based Estimation
+
+### Overview
+
+The `omega_edm` method provides a training-free approach to estimate $\hat{\omega}$ by leveraging a pretrained EDM (Elucidating the Design Space of Diffusion Models) denoiser.
+
+### Mathematical Formulation
+
+**Target (from Loss Type 1)**:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}\rVert_2^2}{\sigma^3}
+$$
+
+where $\tilde{\mathbf{x}}$ is the clean image.
+
+**Computational Approach**:
+
+Since we don't have access to the true clean image $\tilde{\mathbf{x}}$ during evaluation, we use the EDM denoiser to approximate it:
+
+$$
+\tilde{\mathbf{x}} \approx D_{\text{EDM}}(\mathbf{x}, \sigma)
+$$
+
+Thus, the computational estimate is:
+
+$$
+\hat{\omega}_{\text{edm}}(\mathbf{x}, \sigma) = \frac{\lVert\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\rVert_2^2}{\sigma^3}
+$$
+
+### Relationship to Trained Methods
+
+**Trained Methods**:
+- Learn to predict $\hat{\omega}$ using clean-noisy image pairs during training
+- Model: $\hat{\omega}_\theta(\mathbf{x}, \sigma) \approx \frac{\lVert\mathbf{x} - \tilde{\mathbf{x}}_{\text{true}}\rVert_2^2}{\sigma^3}$
+
+**EDM Computational Method**:
+- Uses pretrained denoiser to estimate $\tilde{\mathbf{x}}$
+- Computes $\hat{\omega}$ directly from the formula
+- No training phase required
+
+### Advantages and Limitations
+
+**Advantages**:
+1. No training required (saves hours of computation)
+2. Based on state-of-the-art pretrained EDM models
+3. Mathematically grounded in the same target formula
+4. Can serve as baseline for comparison
+
+**Limitations**:
+1. Quality depends on EDM denoiser performance
+2. Cannot adapt to specific data distributions through training
+3. Fixed capacity (cannot improve beyond EDM)
+4. Requires downloading pretrained model (~200MB)
+
+---
+
+## Computational Method: Expected Value Estimation
+
+### Overview
+
+The `omega_expected` method provides the simplest computational approach by using the statistical expectation of the squared norm of Gaussian noise. This method requires no training and no pretrained models—only knowledge of the image dimensionality.
+
+### Mathematical Formulation
+
+**Target (from Loss Type 2)**:
+
+$$
+\hat{\omega}_{\text{target}} = \frac{\|\epsilon\|^2}{\sigma}
+$$
+
+where $\epsilon \sim \mathcal{N}(0, \mathbf{I})$ with dimension $d$.
+
+**Statistical Property**:
+
+Since $\epsilon$ is a standard Gaussian random vector with dimension $d$:
+
+$$
+\|\epsilon\|^2 \sim \chi^2_d
+$$
+
+with the following properties:
+- Expectation: $\mathbb{E}[\|\epsilon\|^2] = d$
+- Variance: $\text{Var}[\|\epsilon\|^2] = 2d$
+
+**Computational Estimate**:
+
+Using the expectation:
+
+$$
+\hat{\omega}_{\text{expected}}(\sigma) = \frac{\mathbb{E}[\|\epsilon\|^2]}{\sigma} = \frac{d}{\sigma}
+$$
+
+This provides the expected (mean) value of $\hat{\omega}$ for any noisy image with noise level $\sigma$.
+
+### Interpretation
+
+**What does this estimate?**
+
+This method estimates the **expected value** of omega_hat:
+
+$$
+\mathbb{E}_{\epsilon \sim \mathcal{N}(0, \mathbf{I})}[\hat{\omega}] = \mathbb{E}\left[\frac{\|\epsilon\|^2}{\sigma}\right] = \frac{d}{\sigma}
+$$
+
+**Note**: This is a constant for a given noise level and image dimensionality. It does not depend on the actual image content, only on the statistical properties of the noise.
+
+### Relationship to Other Methods
+
+**Trained Methods**:
+- Learn image-dependent predictions: $\hat{\omega}_\theta(\mathbf{x}, \sigma)$
+- Adapt to specific data distributions
+- Output varies with image content
+
+**EDM Computational Method**:
+- Uses pretrained denoiser: $\hat{\omega}_{\text{edm}}(\mathbf{x}, \sigma) = \frac{\|\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\|^2}{\sigma^3}$
+- Image-dependent (varies with $\mathbf{x}$)
+- Requires model inference
+
+**Expected Value Method**:
+- Uses statistical expectation: $\hat{\omega}_{\text{expected}}(\sigma) = \frac{d}{\sigma}$
+- Image-independent (only depends on $\sigma$)
+- No model inference required
+- Provides theoretical baseline
+
+### Advantages and Limitations
+
+**Advantages**:
+1. **Simplest possible estimator**: No training, no models, just a formula
+2. **Extremely fast**: No neural network inference required
+3. **Mathematically grounded**: Based on well-known chi-squared distribution properties
+4. **Perfect theoretical baseline**: Represents the expected value that trained models should approximate on average
+5. **Zero setup**: No pretrained models to download
+
+**Limitations**:
+1. **Image-independent**: Cannot adapt to specific image content
+2. **Only provides expectation**: Cannot capture variance or image-specific deviations
+3. **Baseline only**: Not suitable for actual sampling (use trained models or EDM method instead)
+
+**When to use**:
+- As a sanity check for trained models
+- For theoretical comparisons and analysis
+- To verify that trained models are learning meaningful patterns beyond the baseline
+- For quick approximate estimates when high accuracy is not critical
+
+### Variance Analysis
+
+While this method provides the expected value $\mathbb{E}[\hat{\omega}] = \frac{d}{\sigma}$, the actual values have variance:
+
+$$
+\text{Var}[\hat{\omega}] = \text{Var}\left[\frac{\|\epsilon\|^2}{\sigma}\right] = \frac{\text{Var}[\|\epsilon\|^2]}{\sigma^2} = \frac{2d}{\sigma^2}
+$$
+
+This means:
+- For large $\sigma$: Low variance, expected value is a good approximation
+- For small $\sigma$: High variance, individual values can deviate significantly from $\frac{d}{\sigma}$
+
+**Standard deviation**: $\text{SD}[\hat{\omega}] = \frac{\sqrt{2d}}{\sigma}$
+
+### Comparison with Ground Truth
+
+For a specific noisy image with known clean image $\tilde{\mathbf{x}}$:
+
+**Ground truth**: 
+$$
+\hat{\omega}_{\text{true}} = \frac{\|\mathbf{x} - \tilde{\mathbf{x}}\|^2}{\sigma^3} = \frac{\|\sigma \epsilon\|^2}{\sigma^3} = \frac{\|\epsilon\|^2}{\sigma}
+$$
+
+**Expected value estimate**:
+$$
+\hat{\omega}_{\text{expected}} = \frac{d}{\sigma}
+$$
+
+**Relationship**:
+$$
+\mathbb{E}[\hat{\omega}_{\text{true}}] = \hat{\omega}_{\text{expected}}
+$$
+
+On average over many samples, the expected value method provides the correct mean, but individual predictions will differ by:
+
+$$
+\hat{\omega}_{\text{true}} - \hat{\omega}_{\text{expected}} = \frac{\|\epsilon\|^2 - d}{\sigma}
+$$
+
+This difference is a zero-mean random variable with variance $\frac{2d}{\sigma^2}$.
+
+---
+
+## Computational Method: Hybrid Estimation
+
+### Overview
+
+The `omega_hybrid` method provides an adaptive computational approach that combines the strengths of both EDM denoiser and Expected Value methods by using a sigma threshold for automatic method selection.
+
+### Mathematical Formulation
+
+**Adaptive Selection**:
+
+$$
+\hat{\omega}_{\text{hybrid}}(\mathbf{x}, \sigma) = \begin{cases}
+\frac{d}{\sigma} & \text{if } \sigma < \sigma_{\text{threshold}} \\
+\frac{\lVert\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\rVert_2^2}{\sigma^3} & \text{if } \sigma \geq \sigma_{\text{threshold}}
+\end{cases}
+$$
+
+where:
+- $\sigma_{\text{threshold}}$ is a configurable threshold (default: 1.0)
+- $d$ is the image dimensionality
+- $D_{\text{EDM}}$ is the pretrained EDM denoiser
+
+### Rationale
+
+The hybrid method leverages empirical observations about the performance characteristics of each method:
+
+**Expected Value Method** ($\frac{d}{\sigma}$):
+- **Strengths**: More accurate for **small $\sigma$** (high signal-to-noise ratio)
+- **Reason**: When noise is small, the actual noise norm $\|\epsilon\|^2$ is close to its expectation $d$
+- **Performance**: Variance $\text{Var}[\hat{\omega}] = \frac{2d}{\sigma^2}$ is low for small $\sigma$
+
+**EDM Denoiser Method** ($\frac{\|\mathbf{x} - D_{\text{EDM}}(\mathbf{x}, \sigma)\|^2}{\sigma^3}$):
+- **Strengths**: More accurate for **large $\sigma$** (low signal-to-noise ratio)
+- **Reason**: EDM denoiser is trained/optimized for heavy noise scenarios
+- **Performance**: Better captures image-specific variations when noise dominates
+
+### Threshold Selection
+
+**Default Value**: $\sigma_{\text{threshold}} = 1.0$
+
+This default is based on empirical observations, but can be tuned:
+
+**Empirical Tuning Process**:
+1. Run separate evaluations with `omega_edm` and `omega_expected`
+2. Generate error vs sigma plots for both methods
+3. Identify crossover point where methods have equal error
+4. Set threshold to that crossover value
+
+**Threshold Effects**:
+- **Lower threshold** (e.g., 0.5): Uses EDM more frequently
+  - Better if EDM is very accurate
+  - Slower due to more model inference
+- **Higher threshold** (e.g., 2.0): Uses Expected Value more frequently
+  - Faster but may sacrifice accuracy for large $\sigma$
+  - Good if sigma range is mostly small
+
+### Per-Sample Adaptivity
+
+A key advantage of the hybrid method is **per-sample adaptivity**:
+
+```python
+# Example batch with mixed sigma values
+sigma_batch = [0.5, 1.2, 0.8, 2.5]
+
+# Automatic per-sample method selection:
+# Sample 0 (σ=0.5): Expected Value (< 1.0)
+# Sample 1 (σ=1.2): EDM (≥ 1.0)
+# Sample 2 (σ=0.8): Expected Value (< 1.0)
+# Sample 3 (σ=2.5): EDM (≥ 1.0)
+```
+
+This is particularly useful when:
+- Sigma distribution is wide (covers both small and large values)
+- Using non-uniform sampling strategies
+- Different samples in a batch have different noise levels
+
+### Relationship to Other Methods
+
+**Trained Methods**:
+- Learn image-dependent predictions
+- Can adapt to data distribution
+- Require hours of training
+
+**EDM Computational Method**:
+- Always uses EDM denoiser
+- Good for large $\sigma$
+- Fixed computational cost per sample
+
+**Expected Value Method**:
+- Always uses statistical expectation
+- Good for small $\sigma$
+- Very fast (no model inference)
+
+**Hybrid Method** (this approach):
+- Adaptive: uses best method per sample
+- Combines strengths of both approaches
+- Efficient: only runs EDM when beneficial
+
+### Mathematical Properties
+
+**Expected Value Region** ($\sigma < \sigma_{\text{threshold}}$):
+
+For small $\sigma$, the noise norm is concentrated around its expectation:
+
+$$
+\|\epsilon\|^2 \approx d + O(\sqrt{2d})
+$$
+
+Therefore:
+
+$$
+\frac{\|\epsilon\|^2}{\sigma} \approx \frac{d}{\sigma} + O\left(\frac{\sqrt{2d}}{\sigma}\right)
+$$
+
+The relative error is:
+
+$$
+\frac{|\hat{\omega}_{\text{true}} - \hat{\omega}_{\text{expected}}|}{|\hat{\omega}_{\text{true}}|} \approx \frac{|\|\epsilon\|^2 - d|}{d} = O\left(\frac{1}{\sqrt{d}}\right)
+$$
+
+which is small for high-dimensional images.
+
+**EDM Denoiser Region** ($\sigma \geq \sigma_{\text{threshold}}$):
+
+For large $\sigma$, the EDM denoiser $D_{\text{EDM}}(\mathbf{x}, \sigma)$ provides a better estimate of the clean image $\tilde{\mathbf{x}}$ than the simple expectation, leading to more accurate $\hat{\omega}$ computation.
+
+### Advantages and Limitations
+
+**Advantages**:
+1. **Adaptive accuracy**: Best method automatically selected per sample
+2. **Wide sigma coverage**: Accurate across full sigma range
+3. **Empirically validated**: Based on observed performance characteristics
+4. **Efficient resource usage**: Only runs EDM when beneficial
+5. **No training required**: Like other computational methods
+6. **Per-sample adaptivity**: Each sample uses optimal method
+
+**Limitations**:
+1. **Requires threshold tuning**: Default may not be optimal for all datasets
+2. **EDM dependency**: Still requires pretrained EDM model (~200MB)
+3. **Computational cost**: Higher than pure Expected Value for mixed batches
+4. **Threshold discontinuity**: Small change in $\sigma$ near threshold causes method switch
+
+**When to use**:
+- When sigma distribution spans both small and large values
+- When you've observed different methods perform better in different regions
+- For best overall computational accuracy without training
+- When you have empirical evidence about crossover point
+
+### Performance Characteristics
+
+**Computational Cost**:
+
+For a batch with $N$ samples:
+- $N_{\text{small}}$ samples with $\sigma < \sigma_{\text{threshold}}$
+- $N_{\text{large}}$ samples with $\sigma \geq \sigma_{\text{threshold}}$
+
+Cost: $O(N_{\text{large}}) \times \text{Cost}_{\text{EDM}} + O(N_{\text{small}}) \times \text{Cost}_{\text{Expected}}$
+
+Since $\text{Cost}_{\text{Expected}} \ll \text{Cost}_{\text{EDM}}$:
+
+- If most samples have small $\sigma$: Much faster than pure EDM
+- If most samples have large $\sigma$: Similar speed to pure EDM
+- If evenly mixed: Moderate speed benefit
+
+**Accuracy Profile**:
+
+Denoting error as $e(\sigma)$:
+
+$$
+e_{\text{hybrid}}(\sigma) \approx \min(e_{\text{EDM}}(\sigma), e_{\text{expected}}(\sigma))
+$$
+
+This gives the hybrid method a "best-of-both" error profile.
 
 ---
 

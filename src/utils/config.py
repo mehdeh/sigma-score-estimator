@@ -215,6 +215,12 @@ def override_config_with_args(config, args):
     if hasattr(args, 'noise_strategy') and args.noise_strategy is not None:
         config['noise']['strategy'] = args.noise_strategy
     
+    # Model overrides (for computational methods)
+    if hasattr(args, 'sigma_threshold') and args.sigma_threshold is not None:
+        if 'model' not in config:
+            config['model'] = {}
+        config['model']['sigma_threshold'] = args.sigma_threshold
+    
     # Training overrides
     if hasattr(args, 'loss_type') and args.loss_type is not None:
         config['training']['loss_type'] = args.loss_type
