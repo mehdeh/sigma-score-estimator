@@ -132,7 +132,8 @@ def train_command(args):
     else:
         exp_dir = create_experiment_dir(
             base_dir=os.path.join('experiments', 'train'),
-            prefix='exp'
+            prefix='exp',
+            config=config
         )
     
     print(f"Experiment directory: {exp_dir}")
@@ -243,7 +244,8 @@ def test_command(args):
     else:
         exp_dir = create_experiment_dir(
             base_dir=os.path.join('experiments', 'test'),
-            prefix='exp'
+            prefix='exp',
+            config=config
         )
     
     print(f"Test results directory: {exp_dir}")
