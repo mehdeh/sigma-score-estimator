@@ -178,6 +178,17 @@ def create_default_config():
             'train_val_split': [0.85, 0.10],
             'test_split': 0.05,
             'data_root': './data',
+            'augmentation': {
+                'enabled': True,
+                'horizontal_flip': True,
+                'vertical_flip': True,
+                'rotation': True,
+                'gaussian_noise': True,
+                'gaussian_noise_std': 0.05,
+                'flip_prob': 0.5,
+                'rotation_prob': 0.5,
+                'noise_prob': 0.3,
+            },
         },
         'checkpoint': {
             'save_format': 'pkl',
@@ -246,6 +257,37 @@ def override_config_with_args(config, args):
     # Seed override
     if hasattr(args, 'seed') and args.seed is not None:
         config['seed'] = args.seed
+    
+    # Data augmentation overrides
+    if hasattr(args, 'augmentation') and args.augmentation is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['enabled'] = args.augmentation
+    
+    if hasattr(args, 'aug_hflip') and args.aug_hflip is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['horizontal_flip'] = args.aug_hflip
+    
+    if hasattr(args, 'aug_vflip') and args.aug_vflip is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['vertical_flip'] = args.aug_vflip
+    
+    if hasattr(args, 'aug_rotation') and args.aug_rotation is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['rotation'] = args.aug_rotation
+    
+    if hasattr(args, 'aug_noise') and args.aug_noise is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['gaussian_noise'] = args.aug_noise
+    
+    if hasattr(args, 'aug_noise_std') and args.aug_noise_std is not None:
+        if 'augmentation' not in config['data']:
+            config['data']['augmentation'] = {}
+        config['data']['augmentation']['gaussian_noise_std'] = args.aug_noise_std
     
     return config
 

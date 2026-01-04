@@ -149,7 +149,8 @@ def train_command(args):
         train_val_split=config['data']['train_val_split'],
         test_split=config['data']['test_split'],
         num_workers=config['data']['num_workers'],
-        data_root=config['data']['data_root']
+        data_root=config['data']['data_root'],
+        augmentation_config=config['data'].get('augmentation', None)
     )
     print(f"Train batches: {len(train_loader)}")
     print(f"Val batches: {len(val_loader)}")
@@ -254,14 +255,15 @@ def test_command(args):
     config_save_path = os.path.join(exp_dir, 'config.yaml')
     save_config(config, config_save_path)
     
-    # Load data
+    # Load data (no augmentation for testing)
     print("\nLoading CIFAR-10 dataset...")
     train_loader, val_loader, test_loader = get_cifar10_dataloaders(
         batch_size=config['data']['batch_size'],
         train_val_split=config['data']['train_val_split'],
         test_split=config['data']['test_split'],
         num_workers=config['data']['num_workers'],
-        data_root=config['data']['data_root']
+        data_root=config['data']['data_root'],
+        augmentation_config=None  # No augmentation for testing
     )
     print(f"Test batches: {len(test_loader)}")
     
@@ -407,6 +409,14 @@ def main():
     train_parser.add_argument('--exp-dir', type=str, help='Experiment directory')
     train_parser.add_argument('--resume', type=str, help='Resume from checkpoint')
     train_parser.add_argument('--early-stopping', type=str_to_bool, help='Enable/disable early stopping (true/false)')
+    
+    # Data augmentation arguments
+    train_parser.add_argument('--augmentation', type=str_to_bool, help='Enable/disable data augmentation (true/false)')
+    train_parser.add_argument('--aug-hflip', type=str_to_bool, help='Enable/disable horizontal flip augmentation')
+    train_parser.add_argument('--aug-vflip', type=str_to_bool, help='Enable/disable vertical flip augmentation')
+    train_parser.add_argument('--aug-rotation', type=str_to_bool, help='Enable/disable rotation augmentation')
+    train_parser.add_argument('--aug-noise', type=str_to_bool, help='Enable/disable Gaussian noise augmentation')
+    train_parser.add_argument('--aug-noise-std', type=float, help='Standard deviation for Gaussian noise augmentation')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test a trained model or computational method')

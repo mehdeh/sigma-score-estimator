@@ -7,6 +7,9 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
+from .augmentation import create_augmentation_from_config
+from .augmented_dataset import AugmentedDataset
+
 
 def get_cifar10_dataloaders(
     batch_size=128,
@@ -15,7 +18,8 @@ def get_cifar10_dataloaders(
     num_workers=4,
     data_root='./data',
     persistent_workers=True,
-    prefetch_factor=2
+    prefetch_factor=2,
+    augmentation_config=None
 ):
     """
     Load CIFAR-10 dataset and create train/val/test dataloaders.
@@ -31,6 +35,7 @@ def get_cifar10_dataloaders(
         data_root (str): Root directory for downloading/storing CIFAR-10 data
         persistent_workers (bool): Keep workers alive between epochs (faster for multiple epochs)
         prefetch_factor (int): Number of batches to prefetch per worker
+        augmentation_config (dict): Configuration for data augmentation (applied only to training data)
     
     Returns:
         tuple: (train_loader, val_loader, test_loader)
@@ -64,6 +69,15 @@ def get_cifar10_dataloaders(
     train_dataset, val_dataset, test_dataset = random_split(
         combined_dataset, [train_size, val_size, test_size]
     )
+    
+    # Apply augmentation only to training dataset
+    augmentation_transform = create_augmentation_from_config(augmentation_config)
+    if augmentation_transform is not None:
+        print(f"Applying data augmentation to training set:")
+        print(f"  {augmentation_transform}")
+        train_dataset = AugmentedDataset(train_dataset, augmentation_transform)
+    else:
+        print("No data augmentation applied (augmentation disabled in config)")
 
     # Create DataLoaders with performance optimizations
     # persistent_workers keeps workers alive between epochs (reduces overhead)
