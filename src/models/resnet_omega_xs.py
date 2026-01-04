@@ -68,6 +68,14 @@ class ResNetOmegaXSigma(nn.Module):
     """
     
     def __init__(self, block=BasicBlock, num_blocks=[2, 2, 2, 2], dropout_rate=0.0):
+        """
+        Initialize the ResNetOmegaXSigma model.
+        
+        Args:
+            block: The residual block class to use (e.g., BasicBlock)
+            num_blocks: List of integers specifying the number of blocks in each layer
+            dropout_rate: Dropout probability for regularization (default: 0.0)
+        """
         super(ResNetOmegaXSigma, self).__init__()
         self.in_planes = 64
 
@@ -143,7 +151,7 @@ class ResNetOmegaXSigma(nn.Module):
         return output
 
 
-def resnet18_omega_xs(dropout_rate=0.1):
+def resnet18_omega_xs(dropout_rate=0.05):
     """
     Create a ResNet18-based model for omega(x, sigma) estimation.
     

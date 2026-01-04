@@ -5,6 +5,7 @@ Logging utilities for training and evaluation.
 import os
 import json
 import logging
+import math
 from datetime import datetime
 
 
@@ -127,19 +128,68 @@ class MetricsLogger:
         return best_epoch, best_val_loss
 
 
-def create_experiment_dir(base_dir='experiments', prefix='exp'):
+def create_experiment_dir(base_dir='experiments', prefix='exp', config=None):
     """
-    Create a new experiment directory with timestamp.
+    Create a new experiment directory with timestamp and important hyperparameters.
+    
+    Format: {prefix}_{timestamp}_{model}_{loss}_{epochs}e_{lr}_{bs}_{optimizer}
+    Example: exp_20250104_060827_xsigma_chizscore_100e_lr1e-3_bs256_adam
     
     Args:
         base_dir (str): Base directory for experiments
         prefix (str): Prefix for experiment directory name
+        config (dict, optional): Configuration dictionary containing hyperparameters
     
     Returns:
         str: Path to created experiment directory
     """
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    exp_dir = os.path.join(base_dir, f'{prefix}_{timestamp}')
+    name_parts = [prefix, timestamp]
+    
+    if config:
+        # Add model type
+        model_type = config.get('model', {}).get('type', 'unknown')
+        # Shorten model type names for readability
+        model_short = model_type.replace('omega_', '').replace('_', '')
+        name_parts.append(model_short)
+        
+        # Add loss type (for train) or method (for test)
+        training_config = config.get('training', {})
+        loss_type = training_config.get('loss_type', '')
+        if loss_type:
+            # Shorten loss type names
+            loss_short = loss_type.replace('omega_', '').replace('_', '')
+            name_parts.append(loss_short)
+        
+        # Add number of epochs (for train)
+        epochs = training_config.get('epochs')
+        if epochs:
+            name_parts.append(f'{epochs}e')
+        
+        # Add learning rate
+        lr = training_config.get('learning_rate')
+        if lr:
+            # Format learning rate: 0.001 -> lr1e-3, 0.0001 -> lr1e-4, 0.01 -> lr1e-2
+            if lr >= 1.0:
+                lr_str = f'lr{int(lr)}'
+            else:
+                # For values < 1.0, use scientific notation
+                lr_exp = int(abs(math.log10(lr)))
+                lr_str = f'lr1e-{lr_exp}'
+            name_parts.append(lr_str)
+        
+        # Add batch size
+        batch_size = config.get('data', {}).get('batch_size')
+        if batch_size:
+            name_parts.append(f'bs{batch_size}')
+        
+        # Add optimizer type
+        optimizer = training_config.get('optimizer', '')
+        if optimizer:
+            name_parts.append(optimizer)
+    
+    dir_name = '_'.join(name_parts)
+    exp_dir = os.path.join(base_dir, dir_name)
     
     os.makedirs(exp_dir, exist_ok=True)
     

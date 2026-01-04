@@ -4,6 +4,7 @@
 model:
   type: "omega_x_sigma"  # Options: "omega_x", "omega_x_sigma"
   backbone: "resnet18"
+  dropout_rate: 0.05  # Dropout rate for regularization (default: 0.05)
 
 # Noise generation configuration
 noise:
@@ -55,6 +56,18 @@ data:
   data_root: "./data"
   # Note: For A100 with 40GB+ memory, you can try batch_size up to 512 or higher
   # For RTX 2080 Ti with 11GB, use batch_size: 128-192
+  
+  # Real-time data augmentation (applied only to training data)
+  augmentation:
+    enabled: true  # Enable/disable augmentation
+    horizontal_flip: true  # Random horizontal flip
+    vertical_flip: true  # Random vertical flip
+    rotation: true  # Random rotation (90, 180, 270 degrees)
+    gaussian_noise: true  # Add Gaussian noise
+    gaussian_noise_std: 0.05  # Standard deviation for Gaussian noise (recommended: 0.05-0.1)
+    flip_prob: 0.5  # Probability of applying flip operations
+    rotation_prob: 0.5  # Probability of applying rotation
+    noise_prob: 0.3  # Probability of adding Gaussian noise
 
 # Checkpoint configuration
 checkpoint:

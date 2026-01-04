@@ -68,8 +68,15 @@ def train_command(args):
     if args.config:
         config = load_config(args.config)
     else:
-        from src.utils.config import create_default_config
-        config = create_default_config()
+        # Default to config/default.yaml if no config is specified
+        default_config_path = 'config/default.yaml'
+        if os.path.exists(default_config_path):
+            config = load_config(default_config_path)
+        else:
+            # Fallback to programmatic default if file doesn't exist
+            from src.utils.config import create_default_config
+            config = create_default_config()
+            print(f"Warning: {default_config_path} not found. Using programmatic default config.")
     
     # Override config with command-line arguments
     config = override_config_with_args(config, args)
@@ -125,7 +132,8 @@ def train_command(args):
     else:
         exp_dir = create_experiment_dir(
             base_dir=os.path.join('experiments', 'train'),
-            prefix='exp'
+            prefix='exp',
+            config=config
         )
     
     print(f"Experiment directory: {exp_dir}")
@@ -141,7 +149,8 @@ def train_command(args):
         train_val_split=config['data']['train_val_split'],
         test_split=config['data']['test_split'],
         num_workers=config['data']['num_workers'],
-        data_root=config['data']['data_root']
+        data_root=config['data']['data_root'],
+        augmentation_config=config['data'].get('augmentation', None)
     )
     print(f"Train batches: {len(train_loader)}")
     print(f"Val batches: {len(val_loader)}")
@@ -149,7 +158,10 @@ def train_command(args):
     
     # Create model
     print(f"\nCreating model: {config['model']['type']}")
-    model = create_model(config['model']['type'])
+    model_kwargs = {}
+    if 'dropout_rate' in config['model']:
+        model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+    model = create_model(config['model']['type'], **model_kwargs)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     # Create trainer
@@ -236,7 +248,8 @@ def test_command(args):
     else:
         exp_dir = create_experiment_dir(
             base_dir=os.path.join('experiments', 'test'),
-            prefix='exp'
+            prefix='exp',
+            config=config
         )
     
     print(f"Test results directory: {exp_dir}")
@@ -245,14 +258,15 @@ def test_command(args):
     config_save_path = os.path.join(exp_dir, 'config.yaml')
     save_config(config, config_save_path)
     
-    # Load data
+    # Load data (no augmentation for testing)
     print("\nLoading CIFAR-10 dataset...")
     train_loader, val_loader, test_loader = get_cifar10_dataloaders(
         batch_size=config['data']['batch_size'],
         train_val_split=config['data']['train_val_split'],
         test_split=config['data']['test_split'],
         num_workers=config['data']['num_workers'],
-        data_root=config['data']['data_root']
+        data_root=config['data']['data_root'],
+        augmentation_config=None  # No augmentation for testing
     )
     print(f"Test batches: {len(test_loader)}")
     
@@ -267,7 +281,10 @@ def test_command(args):
         print(f"\nLoading model from: {args.checkpoint}")
         
         # Create model architecture
-        model = create_model(config['model']['type'])
+        model_kwargs = {}
+        if 'dropout_rate' in config.get('model', {}):
+            model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+        model = create_model(config['model']['type'], **model_kwargs)
         
         # Load checkpoint
         model = load_model_only(args.checkpoint, model=model, device=device)
@@ -342,7 +359,10 @@ def export_command(args):
     print(f"Loading from: {args.checkpoint}")
     
     # Create model
-    model = create_model(model_type)
+    model_kwargs = {}
+    if config is not None and 'dropout_rate' in config.get('model', {}):
+        model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+    model = create_model(model_type, **model_kwargs)
     
     # Load checkpoint
     model = load_model_only(args.checkpoint, model=model, device=device)
@@ -398,6 +418,15 @@ def main():
     train_parser.add_argument('--exp-dir', type=str, help='Experiment directory')
     train_parser.add_argument('--resume', type=str, help='Resume from checkpoint')
     train_parser.add_argument('--early-stopping', type=str_to_bool, help='Enable/disable early stopping (true/false)')
+    train_parser.add_argument('--dropout-rate', type=float, help='Dropout rate for model regularization')
+    
+    # Data augmentation arguments
+    train_parser.add_argument('--augmentation', type=str_to_bool, help='Enable/disable data augmentation (true/false)')
+    train_parser.add_argument('--aug-hflip', type=str_to_bool, help='Enable/disable horizontal flip augmentation')
+    train_parser.add_argument('--aug-vflip', type=str_to_bool, help='Enable/disable vertical flip augmentation')
+    train_parser.add_argument('--aug-rotation', type=str_to_bool, help='Enable/disable rotation augmentation')
+    train_parser.add_argument('--aug-noise', type=str_to_bool, help='Enable/disable Gaussian noise augmentation')
+    train_parser.add_argument('--aug-noise-std', type=float, help='Standard deviation for Gaussian noise augmentation')
     
     # Test command
     test_parser = subparsers.add_parser('test', help='Test a trained model or computational method')
