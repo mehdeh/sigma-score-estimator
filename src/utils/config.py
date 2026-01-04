@@ -144,6 +144,7 @@ def create_default_config():
         'model': {
             'type': 'omega_x_sigma',
             'backbone': 'resnet18',
+            'dropout_rate': 0.05,
         },
         'noise': {
             'sigma_min': 0.01,
@@ -217,6 +218,8 @@ def override_config_with_args(config, args):
     # Model overrides
     if hasattr(args, 'model_type') and args.model_type is not None:
         config['model']['type'] = args.model_type
+    if hasattr(args, 'dropout_rate') and args.dropout_rate is not None:
+        config['model']['dropout_rate'] = args.dropout_rate
     
     # Noise overrides
     if hasattr(args, 'sigma_min') and args.sigma_min is not None:

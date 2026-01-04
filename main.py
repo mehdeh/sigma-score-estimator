@@ -158,7 +158,10 @@ def train_command(args):
     
     # Create model
     print(f"\nCreating model: {config['model']['type']}")
-    model = create_model(config['model']['type'])
+    model_kwargs = {}
+    if 'dropout_rate' in config['model']:
+        model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+    model = create_model(config['model']['type'], **model_kwargs)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     # Create trainer
@@ -278,7 +281,10 @@ def test_command(args):
         print(f"\nLoading model from: {args.checkpoint}")
         
         # Create model architecture
-        model = create_model(config['model']['type'])
+        model_kwargs = {}
+        if 'dropout_rate' in config.get('model', {}):
+            model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+        model = create_model(config['model']['type'], **model_kwargs)
         
         # Load checkpoint
         model = load_model_only(args.checkpoint, model=model, device=device)
@@ -353,7 +359,10 @@ def export_command(args):
     print(f"Loading from: {args.checkpoint}")
     
     # Create model
-    model = create_model(model_type)
+    model_kwargs = {}
+    if config is not None and 'dropout_rate' in config.get('model', {}):
+        model_kwargs['dropout_rate'] = config['model']['dropout_rate']
+    model = create_model(model_type, **model_kwargs)
     
     # Load checkpoint
     model = load_model_only(args.checkpoint, model=model, device=device)
@@ -409,6 +418,7 @@ def main():
     train_parser.add_argument('--exp-dir', type=str, help='Experiment directory')
     train_parser.add_argument('--resume', type=str, help='Resume from checkpoint')
     train_parser.add_argument('--early-stopping', type=str_to_bool, help='Enable/disable early stopping (true/false)')
+    train_parser.add_argument('--dropout-rate', type=float, help='Dropout rate for model regularization')
     
     # Data augmentation arguments
     train_parser.add_argument('--augmentation', type=str_to_bool, help='Enable/disable data augmentation (true/false)')
