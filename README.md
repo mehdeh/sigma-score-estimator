@@ -73,7 +73,7 @@ python main.py train --config config/default.yaml
 
 # Train omega(x, sigma) model with custom settings
 python main.py train \
-    --config config/model_x_sigma.yaml \
+    --config config/default.yaml \
     --epochs 100 \
     --learning-rate 0.001 \
     --batch-size 128 \
@@ -137,8 +137,6 @@ python main.py export \
 sigma-score-estimator/
 ├── config/                      # Configuration files
 │   ├── default.yaml            # Default configuration
-│   ├── model_x.yaml            # Config for omega(x)
-│   ├── model_x_sigma.yaml      # Config for omega(x,sigma)
 │   ├── method_edm.yaml         # Config for EDM computational method
 │   ├── method_expected.yaml    # Config for Expected Value computational method
 │   └── method_hybrid.yaml      # Config for Hybrid computational method
