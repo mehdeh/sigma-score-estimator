@@ -68,8 +68,15 @@ def train_command(args):
     if args.config:
         config = load_config(args.config)
     else:
-        from src.utils.config import create_default_config
-        config = create_default_config()
+        # Default to config/default.yaml if no config is specified
+        default_config_path = 'config/default.yaml'
+        if os.path.exists(default_config_path):
+            config = load_config(default_config_path)
+        else:
+            # Fallback to programmatic default if file doesn't exist
+            from src.utils.config import create_default_config
+            config = create_default_config()
+            print(f"Warning: {default_config_path} not found. Using programmatic default config.")
     
     # Override config with command-line arguments
     config = override_config_with_args(config, args)
